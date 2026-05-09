@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Explosion Scorer Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --surface: rgba(19, 24, 38, 0.6);
+  --surface-2: rgba(26, 32, 48, 0.7);
+  --border: rgba(139, 146, 168, 0.2);
+  --border-strong: rgba(139, 146, 168, 0.35);
+  --text: #e7e9ee;
+  --text-2: #b0b6c8;
+  --text-3: #7a8199;
+  --accent: #a78bfa;
+  --accent-2: #818cf8;
+  --green: #34d399;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --gray: #94a3b8;
+  --info-bg: rgba(129, 140, 248, 0.18);
+  --info-text: #c4b5fd;
+  --success-bg: rgba(52, 211, 153, 0.18);
+  --success-text: #6ee7b7;
+  --warning-bg: rgba(251, 191, 36, 0.18);
+  --warning-text: #fcd34d;
+  --danger-bg: rgba(248, 113, 113, 0.18);
+  --danger-text: #fca5a5;
+  --pink-bg: rgba(244, 114, 182, 0.18);
+  --pink-text: #f9a8d4;
+}
+
+/* === GALAXY BACKGROUND === */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  padding: 20px;
+  min-height: 100vh;
+  line-height: 1.5;
+  background:
+    radial-gradient(ellipse at 15% 20%, #4c1d95 0%, transparent 45%),
+    radial-gradient(ellipse at 85% 75%, #1e3a8a 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, #312e81 0%, transparent 60%),
+    linear-gradient(180deg, #0a0a1f 0%, #050514 100%);
+  background-attachment: fixed;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Funkelnde Sterne */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 30%, white, transparent),
+    radial-gradient(1px 1px at 60% 70%, white, transparent),
+    radial-gradient(2px 2px at 80% 20%, white, transparent),
+    radial-gradient(1px 1px at 30% 80%, white, transparent),
+    radial-gradient(1.5px 1.5px at 90% 50%, #fbbf24, transparent),
+    radial-gradient(1px 1px at 15% 60%, white, transparent),
+    radial-gradient(2px 2px at 45% 15%, #fbbf24, transparent),
+    radial-gradient(1px 1px at 70% 40%, white, transparent),
+    radial-gradient(1.5px 1.5px at 25% 50%, #c4b5fd, transparent),
+    radial-gradient(1px 1px at 85% 85%, white, transparent),
+    radial-gradient(2px 2px at 5% 90%, white, transparent),
+    radial-gradient(1px 1px at 95% 10%, #c4b5fd, transparent);
+  background-size: 350px 350px;
+  background-repeat: repeat;
+  animation: twinkle 8s ease-in-out infinite;
+  opacity: 0.9;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.container { max-width: 1100px; margin: 0 auto; position: relative; z-index: 1; }
+[dir="rtl"] { text-align: right; }
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 24px;
+  padding-bottom: 16px; border-bottom: 1px solid var(--border);
+}
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #c4b5fd 0%, #f9a8d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.subtitle { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+
+.lang-switch {
+  display: flex; gap: 4px;
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.lang-btn {
+  border: none; padding: 6px 12px; font-size: 13px;
+  background: transparent; color: var(--text-2); border-radius: 6px;
+  cursor: pointer; font-weight: 500;
+}
+.lang-btn.active {
+  background: rgba(167, 139, 250, 0.25);
+  color: white;
+}
+
+.search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-box input {
+  flex: 1; padding: 14px 18px; font-size: 15px;
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px; outline: none;
+}
+.search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
+.search-box button {
+  padding: 14px 28px; font-size: 14px; font-weight: 600;
+  background: linear-gradient(135deg, #a78bfa 0%, #818cf8 100%);
+  color: white; border: none; border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(167, 139, 250, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.search-box button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(167, 139, 250, 0.5);
+}
+.search-box button:disabled {
+  opacity: 0.5; cursor: not-allowed; transform: none;
+}
+
+.examples { display: flex; gap: 6px; margin-bottom: 24px; flex-wrap: wrap; }
+.examples button {
+  padding: 6px 12px; font-size: 12px;
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer;
+}
+.examples button:hover { border-color: var(--accent); color: var(--text); }
+
+.error {
+  padding: 12px 16px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-radius: 10px;
+  margin-bottom: 16px; font-size: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.loading { text-align: center; padding: 40px; color: var(--text-2); font-size: 14px; }
+.spinner {
+  display: inline-block; width: 22px; height: 22px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-inline-end: 8px; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* === GLASS CARDS === */
+.card {
+  background: var(--surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.card-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; font-size: 14px; font-weight: 600;
+}
+
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab {
+  padding: 5px 12px; font-size: 12px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer; font-weight: 500;
+}
+.tab.active {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  color: white; border-color: transparent;
+}
+
+.company-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  flex-wrap: wrap; gap: 12px;
+}
+.company-name { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.company-name span { font-size: 14px; color: var(--text-2); font-weight: 400; }
+.company-meta { font-size: 13px; color: var(--text-2); }
+.price-block { text-align: end; }
+.price-big { font-size: 28px; font-weight: 700; }
+.price-change { font-size: 13px; }
+
+.chart-wrap { position: relative; width: 100%; height: 260px; }
+
+.score-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.score-big {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  background: linear-gradient(135deg, #c4b5fd 0%, #f9a8d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.recommendation {
+  margin-inline-start: auto; font-size: 13px;
+  padding: 7px 16px; border-radius: 10px; font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.bar-track {
+  height: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.bar-fill {
+  height: 100%; width: 0%;
+  transition: width 0.6s, background 0.3s;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.cat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.cat-card {
+  background: var(--surface-2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+.cat-label { font-size: 12px; color: var(--text-2); margin-bottom: 4px; font-weight: 500; }
+.cat-value { font-size: 22px; font-weight: 700; }
+.cat-max { font-size: 13px; color: var(--text-2); font-weight: 400; }
+.cat-bar {
+  height: 4px; background: rgba(0, 0, 0, 0.4);
+  border-radius: 2px; margin-top: 8px; overflow: hidden;
+}
+.cat-bar-fill { height: 100%; width: 0%; transition: width 0.6s; }
+
+.metric-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.metric {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px;
+}
+.metric-label { font-size: 11px; color: var(--text-2); }
+.metric-value { font-size: 16px; font-weight: 600; margin-top: 2px; }
+
+.scenario { margin-bottom: 12px; }
+.scenario-row {
+  display: flex; justify-content: space-between;
+  font-size: 13px; margin-bottom: 4px;
+}
+.scenario-bar {
+  height: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.scenario-fill {
+  height: 100%; transition: width 0.7s;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.news-item {
+  display: flex; gap: 12px; padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 8px; cursor: pointer;
+  border-inline-start: 3px solid var(--gray);
+  transition: transform 0.15s, border-color 0.15s;
+}
+.news-item:hover { transform: translateX(2px); border-color: var(--border-strong); }
+[dir="rtl"] .news-item:hover { transform: translateX(-2px); }
+.news-item.positive { border-inline-start-color: var(--green); }
+.news-item.negative { border-inline-start-color: var(--red); }
+.news-item.neutral { border-inline-start-color: var(--amber); }
+.news-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.news-meta { font-size: 11px; color: var(--text-3); }
+
+.driver {
+  display: flex; gap: 10px; padding: 12px 14px;
+  border-radius: 10px; margin-bottom: 8px;
+  line-height: 1.5; font-size: 12px;
+  border: 1px solid transparent;
+}
+.driver-pos {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+.driver-neg {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+.driver-icon { font-size: 16px; flex-shrink: 0; }
+.driver-title { font-weight: 600; margin-bottom: 2px; }
+
+.summary-text {
+  font-size: 13px; color: var(--text-2); line-height: 1.6;
+  max-height: 100px; overflow: hidden; transition: max-height 0.3s;
+}
+.summary-text.expanded { max-height: 800px; }
+.expand-btn {
+  font-size: 12px; color: var(--accent);
+  background: none; border: none;
+  cursor: pointer; padding: 4px 0; margin-top: 4px;
+  font-weight: 500;
+}
+
+.disclaimer {
+  padding: 14px;
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px; color: var(--text-2); line-height: 1.6;
+}
+.disclaimer strong { color: var(--text); }
+
+@media (max-width: 600px) {
+  .price-block { text-align: start; }
+  .score-big { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div>
+    <h1 id="app-title">📊 Stock Explosion Scorer Pro</h1>
+    <div class="subtitle" id="app-subtitle">Live-Daten · News · Wahrscheinlichkeiten · Charts</div>
+  </div>
+  <div class="lang-switch">
+    <button class="lang-btn active" data-lang="de" onclick="setLang('de')">🇩🇪 DE</button>
+    <button class="lang-btn" data-lang="en" onclick="setLang('en')">🇬🇧 EN</button>
+    <button class="lang-btn" data-lang="ar" onclick="setLang('ar')">🇸🇦 AR</button>
+  </div>
+</header>
+
+<div class="search-box">
+  <input type="text" id="ticker-input" placeholder="z.B. NVDA, AAPL, TSLA"
+         onkeydown="if(event.key==='Enter') analyze()">
+  <button id="analyze-btn" onclick="analyze()">Analysieren</button>
+</div>
+
+<div class="examples">
+  <span style="font-size:12px;color:var(--text-3);align-self:center;" id="lbl-examples">Beispiele:</span>
+  <button onclick="quickAnalyze('NVDA')">NVDA</button>
+  <button onclick="quickAnalyze('AAPL')">AAPL</button>
+  <button onclick="quickAnalyze('TSLA')">TSLA</button>
+  <button onclick="quickAnalyze('META')">META</button>
+  <button onclick="quickAnalyze('PLTR')">PLTR</button>
+  <button onclick="quickAnalyze('AMD')">AMD</button>
+</div>
+
+<div id="error-box"></div>
+<div id="loading-box"></div>
+
+<div id="result-box" style="display:none;">
+  <div class="card">
+    <div class="company-header">
+      <div>
+        <div class="company-name" id="company-name"></div>
+        <div class="company-meta" id="company-meta"></div>
+      </div>
+      <div class="price-block">
+        <div class="price-big" id="price-big"></div>
+        <div class="price-change" id="price-change"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span id="lbl-chart">📈 Live-Chart</span>
+      <div class="tabs" id="chart-tabs">
+        <button class="tab" onclick="setChartRange('1m')">1M</button>
+        <button class="tab" onclick="setChartRange('3m')">3M</button>
+        <button class="tab active" onclick="setChartRange('12m')">12M</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="score-row">
+      <span style="font-size: 13px; color: var(--text-2);" id="lbl-total">Stock Explosion Score</span>
+      <span class="score-big" id="total-score">0</span>
+      <span style="font-size: 14px; color: var(--text-2);">/ 100</span>
+      <span class="recommendation" id="recommendation">—</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="total-bar"></div></div>
+    <div class="cat-grid" style="margin-top: 16px;">
+      <div class="cat-card">
+        <div class="cat-label" id="lbl-tech">Technical</div>
+        <div class="cat-value"><span id="cat-tech">0</span><span class="cat-max"> / 40</span></div>
+        <div class="cat-bar"><div class="cat-bar-fill" id="bar-tech" style="background:#818cf8"></div></div>
+      </div>
+      <div class="cat-card">
+        <div class="cat-label" id="lbl-fund">Fundamental</div>
+        <div class="cat-value"><span id="cat-fund">0</span><span class="cat-max"> / 35</span></div>
+        <div class="cat-bar"><div class="cat-bar-fill" id="bar-fund" style="background:#34d399"></div></div>
+      </div>
+      <div class="cat-card">
+        <div class="cat-label" id="lbl-macro">Macro</div>
+        <div class="cat-value"><span id="cat-macro">0</span><span class="cat-max"> / 15</span></div>
+        <div class="cat-bar"><div class="cat-bar-fill" id="bar-macro" style="background:#fbbf24"></div></div>
+      </div>
+      <div class="cat-card">
+        <div class="cat-label" id="lbl-cat">Catalyst</div>
+        <div class="cat-value"><span id="cat-cat">0</span><span class="cat-max"> / 10</span></div>
+        <div class="cat-bar"><div class="cat-bar-fill" id="bar-cat" style="background:#f9a8d4"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span id="lbl-about">📚 Über das Unternehmen</span></div>
+    <div class="summary-text" id="company-summary"></div>
+    <button class="expand-btn" id="expand-btn" onclick="toggleSummary()">▼ Mehr anzeigen</button>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span id="lbl-expectations">🎯 Erwartungen & Wahrscheinlichkeiten</span></div>
+    <div class="metric-grid" id="analyst-metrics" style="margin-bottom: 16px;"></div>
+    <div id="scenarios"></div>
+    <div style="font-size: 11px; color: var(--text-3); margin-top: 12px;
+                padding-top: 12px; border-top: 1px solid var(--border); line-height: 1.5;"
+         id="scenarios-note"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span id="lbl-drivers">💡 Was diese Aktie antreibt</span></div>
+    <div id="drivers-pos" style="margin-bottom: 8px;"></div>
+    <div id="drivers-neg"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span id="lbl-news">📰 Aktuelle Nachrichten</span>
+      <span style="font-size: 11px; color: var(--text-3);" id="lbl-news-source">Live von Yahoo Finance</span>
+    </div>
+    <div id="news-list"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span id="lbl-keymetrics">📊 Kennzahlen</span></div>
+    <div class="metric-grid" id="key-metrics"></div>
+  </div>
+
+  <div class="disclaimer">
+    <strong id="lbl-disclaimer-title">⚠️ Hinweis:</strong>
+    <span id="lbl-disclaimer">Score 80+ = hohe Konfluenz historischer Setup-Bedingungen. Dies ist keine Anlageberatung. Eigene Recherche und Risikomanagement bleiben deine Verantwortung.</span>
+  </div>
+</div>
+
+</div>
+
+<script>
+const i18n = {
+  de: {
+    dir:'ltr',lang:'de',title:'📊 Stock Explosion Scorer Pro',
+    subtitle:'Live-Daten · News · Wahrscheinlichkeiten · Charts',
+    placeholder:'z.B. NVDA, AAPL, TSLA',analyze:'Analysieren',analyzing:'Analysiere...',
+    examples:'Beispiele:',total:'Stock Explosion Score',
+    tech:'Technisch',fund:'Fundamental',macro:'Makro',catalyst:'Katalysator',
+    rec_strong:'🟢 STARKER KAUFKANDIDAT',rec_watch:'🟡 BEOBACHTUNGSLISTE',
+    rec_neutral:'⚪ NEUTRAL',rec_avoid:'🔴 MEIDEN',
+    chart:'📈 Live-Chart',about:'📚 Über das Unternehmen',
+    expectations:'🎯 Erwartungen & Wahrscheinlichkeiten',
+    drivers:'💡 Was diese Aktie antreibt',news:'📰 Aktuelle Nachrichten',
+    keymetrics:'📊 Kennzahlen',news_source:'Live von Yahoo Finance',
+    expand_more:'▼ Mehr anzeigen',expand_less:'▲ Weniger',
+    analyst_consensus:'Analyst-Konsens',target_price:'Kursziel (12M)',upside:'Upside',
+    eps_forward:'EPS-Erwartung',volatility:'Volatilität (annualisiert)',
+    analysts_count:'Analysten',
+    bull:'🟢 Bull (≥+30%)',base:'🔵 Base (+5% bis +30%)',
+    sideways:'🟡 Sideways (-5% bis +5%)',bear:'🔴 Bear (<-5%)',
+    market_cap:'Marktkap.',pe:'KGV',forward_pe:'Forward-KGV',
+    beta:'Beta',dividend:'Dividende',high52:'52w Hoch',low52:'52w Tief',avg_vol:'Ø Volumen',
+    scenarios_note:'Wahrscheinlichkeiten basieren auf Score, Analyst-Konsens und Volatilität. <strong>Keine Garantie</strong> — statistische Schätzung.',
+    sentiment_pos:'Positiv',sentiment_neg:'Negativ',sentiment_neu:'Neutral',
+    rec_buy:'Kaufen',rec_sb:'Stark Kaufen',rec_hold:'Halten',rec_sell:'Verkaufen',
+    no_news:'Keine aktuellen Nachrichten',no_summary:'Keine Beschreibung verfügbar',
+    err_empty:'Bitte einen Ticker eingeben',err_network:'Netzwerkfehler',
+    loading:'Lade Live-Daten',
+    disclaimer_title:'⚠️ Hinweis:',
+    disclaimer:'Score 80+ = hohe Konfluenz historischer Setup-Bedingungen. Dies ist keine Anlageberatung. Eigene Recherche und Risikomanagement bleiben deine Verantwortung.',
+  },
+  en: {
+    dir:'ltr',lang:'en',title:'📊 Stock Explosion Scorer Pro',
+    subtitle:'Live data · News · Probabilities · Charts',
+    placeholder:'e.g. NVDA, AAPL, TSLA',analyze:'Analyze',analyzing:'Analyzing...',
+    examples:'Examples:',total:'Stock Explosion Score',
+    tech:'Technical',fund:'Fundamental',macro:'Macro',catalyst:'Catalyst',
+    rec_strong:'🟢 STRONG BUY CANDIDATE',rec_watch:'🟡 WATCHLIST',
+    rec_neutral:'⚪ NEUTRAL',rec_avoid:'🔴 AVOID',
+    chart:'📈 Live Chart',about:'📚 About the Company',
+    expectations:'🎯 Expectations & Probabilities',
+    drivers:'💡 What drives this stock',news:'📰 Latest News',
+    keymetrics:'📊 Key Metrics',news_source:'Live from Yahoo Finance',
+    expand_more:'▼ Show more',expand_less:'▲ Show less',
+    analyst_consensus:'Analyst Consensus',target_price:'Price Target (12M)',upside:'Upside',
+    eps_forward:'EPS Estimate',volatility:'Volatility (annualized)',
+    analysts_count:'analysts',
+    bull:'🟢 Bull (≥+30%)',base:'🔵 Base (+5% to +30%)',
+    sideways:'🟡 Sideways (-5% to +5%)',bear:'🔴 Bear (<-5%)',
+    market_cap:'Market Cap',pe:'P/E',forward_pe:'Forward P/E',
+    beta:'Beta',dividend:'Dividend',high52:'52w High',low52:'52w Low',avg_vol:'Avg Volume',
+    scenarios_note:'Probabilities based on score, analyst consensus, and volatility. <strong>No guarantee</strong> — statistical estimate.',
+    sentiment_pos:'Positive',sentiment_neg:'Negative',sentiment_neu:'Neutral',
+    rec_buy:'Buy',rec_sb:'Strong Buy',rec_hold:'Hold',rec_sell:'Sell',
+    no_news:'No recent news',no_summary:'No description available',
+    err_empty:'Please enter a ticker',err_network:'Network error',
+    loading:'Loading live data',
+    disclaimer_title:'⚠️ Disclaimer:',
+    disclaimer:'Score 80+ = high confluence of historical setup conditions. Not investment advice. Your own due diligence remains essential.',
+  },
+  ar: {
+    dir:'rtl',lang:'ar',title:'📊 محلل الانفجار السعري برو',
+    subtitle:'بيانات حية · أخبار · احتمالات · رسوم بيانية',
+    placeholder:'مثال: NVDA, AAPL, TSLA',analyze:'تحليل',analyzing:'جاري التحليل...',
+    examples:'أمثلة:',total:'النتيجة الإجمالية',
+    tech:'فني',fund:'أساسي',macro:'كلي',catalyst:'محفز',
+    rec_strong:'🟢 مرشح شراء قوي',rec_watch:'🟡 قائمة المراقبة',
+    rec_neutral:'⚪ محايد',rec_avoid:'🔴 تجنب',
+    chart:'📈 رسم بياني حي',about:'📚 عن الشركة',
+    expectations:'🎯 التوقعات والاحتمالات',
+    drivers:'💡 ما يحرك هذا السهم',news:'📰 آخر الأخبار',
+    keymetrics:'📊 المؤشرات الرئيسية',news_source:'حي من Yahoo Finance',
+    expand_more:'▼ عرض المزيد',expand_less:'▲ عرض أقل',
+    analyst_consensus:'إجماع المحللين',target_price:'السعر المستهدف',upside:'الصعود',
+    eps_forward:'تقدير ربح السهم',volatility:'التذبذب (سنوي)',analysts_count:'محللين',
+    bull:'🟢 صعودي (≥+30%)',base:'🔵 أساسي (+5% إلى +30%)',
+    sideways:'🟡 جانبي (-5% إلى +5%)',bear:'🔴 هبوطي (<-5%)',
+    market_cap:'القيمة السوقية',pe:'مكرر الربحية',forward_pe:'مكرر آجل',
+    beta:'بيتا',dividend:'توزيعات',high52:'قمة 52 أسبوع',low52:'قاع 52 أسبوع',avg_vol:'متوسط الحجم',
+    scenarios_note:'الاحتمالات مبنية على النتيجة والمحللين والتذبذب. <strong>لا ضمان</strong> — تقدير إحصائي.',
+    sentiment_pos:'إيجابي',sentiment_neg:'سلبي',sentiment_neu:'محايد',
+    rec_buy:'شراء',rec_sb:'شراء قوي',rec_hold:'احتفاظ',rec_sell:'بيع',
+    no_news:'لا توجد أخبار حديثة',no_summary:'لا يوجد وصف',
+    err_empty:'يرجى إدخال رمز السهم',err_network:'خطأ في الشبكة',
+    loading:'جاري التحميل',
+    disclaimer_title:'⚠️ تنبيه:',
+    disclaimer:'النتيجة 80+ تعني التقاء عوامل تاريخية. هذا ليس نصيحة استثمارية. البحث الشخصي مسؤوليتك.',
+  },
+};
+
+const CAT_OF = {1:0,2:0,3:0,4:0,5:0,6:0, 7:1,8:1,9:1,10:1,11:1,12:1,
+                13:2,14:2,15:2,16:2,17:2, 18:3,19:3};
+
+let currentLang = 'de';
+let lastResult = null;
+let chartInstance = null;
+let currentRange = '12m';
+
+function setLang(lang) {
+  currentLang = lang;
+  const t = i18n[lang];
+  document.documentElement.lang = t.lang;
+  document.documentElement.dir = t.dir;
+  document.body.dir = t.dir;
+  document.getElementById('app-title').textContent = t.title;
+  document.getElementById('app-subtitle').textContent = t.subtitle;
+  document.getElementById('ticker-input').placeholder = t.placeholder;
+  document.getElementById('analyze-btn').textContent = t.analyze;
+  document.getElementById('lbl-examples').textContent = t.examples;
+  document.getElementById('lbl-total').textContent = t.total;
+  document.getElementById('lbl-tech').textContent = t.tech;
+  document.getElementById('lbl-fund').textContent = t.fund;
+  document.getElementById('lbl-macro').textContent = t.macro;
+  document.getElementById('lbl-cat').textContent = t.catalyst;
+  document.getElementById('lbl-chart').textContent = t.chart;
+  document.getElementById('lbl-about').textContent = t.about;
+  document.getElementById('lbl-expectations').textContent = t.expectations;
+  document.getElementById('lbl-drivers').textContent = t.drivers;
+  document.getElementById('lbl-news').textContent = t.news;
+  document.getElementById('lbl-news-source').textContent = t.news_source;
+  document.getElementById('lbl-keymetrics').textContent = t.keymetrics;
+  document.getElementById('scenarios-note').innerHTML = t.scenarios_note;
+  document.getElementById('lbl-disclaimer-title').textContent = t.disclaimer_title;
+  document.getElementById('lbl-disclaimer').textContent = t.disclaimer;
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+  if (lastResult) renderResult(lastResult);
+}
+
+function quickAnalyze(ticker) {
+  document.getElementById('ticker-input').value = ticker;
+  analyze();
+}
+
+async function analyze() {
+  const t = i18n[currentLang];
+  const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+  if (!ticker) { showError(t.err_empty); return; }
+  document.getElementById('error-box').innerHTML = '';
+  document.getElementById('result-box').style.display = 'none';
+  document.getElementById('loading-box').innerHTML =
+    '<div class="loading"><span class="spinner"></span>' + t.loading + ' (' + ticker + ')...</div>';
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('analyze-btn').textContent = t.analyzing;
+  try {
+    const r = await fetch('/api/score/' + encodeURIComponent(ticker));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Unknown error');
+    lastResult = data;
+    renderResult(data);
+  } catch (e) {
+    showError(e.message || t.err_network);
+  } finally {
+    document.getElementById('loading-box').innerHTML = '';
+    document.getElementById('analyze-btn').disabled = false;
+    document.getElementById('analyze-btn').textContent = t.analyze;
+  }
+}
+
+function showError(msg) {
+  document.getElementById('error-box').innerHTML = '<div class="error">⚠️ ' + msg + '</div>';
+}
+
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  if (Math.abs(n) >= 1e12) return (n / 1e12).toFixed(2) + 'T';
+  if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (Math.abs(n) >= 1e3) return n.toLocaleString();
+  return n.toFixed(0);
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const sec = Math.floor((Date.now() - d) / 1000);
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) return Math.floor(sec/60) + 'm';
+  if (sec < 86400) return Math.floor(sec/3600) + 'h';
+  return Math.floor(sec/86400) + 'd';
+}
+
+function renderResult(data) {
+  const t = i18n[currentLang];
+  document.getElementById('result-box').style.display = 'block';
+  document.getElementById('company-name').innerHTML =
+    data.company + ' <span>(' + data.ticker + ')</span>';
+  document.getElementById('company-meta').textContent =
+    data.sector + (data.industry ? ' · ' + data.industry : '') + (data.exchange ? ' · ' + data.exchange : '');
+  document.getElementById('price-big').textContent = '$' + data.current_price.toFixed(2);
+  const changeColor = data.change >= 0 ? 'var(--success-text)' : 'var(--danger-text)';
+  const arrow = data.change >= 0 ? '↑' : '↓';
+  document.getElementById('price-change').innerHTML =
+    '<span style="color:' + changeColor + '">' + (data.change >= 0 ? '+' : '') + data.change.toFixed(2) +
+    ' (' + (data.change >= 0 ? '+' : '') + data.change_pct.toFixed(2) + '%) ' + arrow + '</span>';
+
+  const total = data.total_score;
+  document.getElementById('total-score').textContent = Math.round(total);
+  const bar = document.getElementById('total-bar');
+  const rec = document.getElementById('recommendation');
+  bar.style.width = total + '%';
+  if (data.recommendation === 'STRONG') {
+    bar.style.background = 'var(--green)'; rec.textContent = t.rec_strong;
+    rec.style.background = 'var(--success-bg)'; rec.style.color = 'var(--success-text)';
+  } else if (data.recommendation === 'WATCH') {
+    bar.style.background = 'var(--amber)'; rec.textContent = t.rec_watch;
+    rec.style.background = 'var(--warning-bg)'; rec.style.color = 'var(--warning-text)';
+  } else if (data.recommendation === 'NEUTRAL') {
+    bar.style.background = 'var(--gray)'; rec.textContent = t.rec_neutral;
+    rec.style.background = 'var(--surface-2)'; rec.style.color = 'var(--text-2)';
+  } else {
+    bar.style.background = 'var(--red)'; rec.textContent = t.rec_avoid;
+    rec.style.background = 'var(--danger-bg)'; rec.style.color = 'var(--danger-text)';
+  }
+
+  const c = data.categories;
+  document.getElementById('cat-tech').textContent = c.technical.toFixed(1);
+  document.getElementById('cat-fund').textContent = c.fundamental.toFixed(1);
+  document.getElementById('cat-macro').textContent = c.macro.toFixed(1);
+  document.getElementById('cat-cat').textContent = c.catalyst.toFixed(1);
+  document.getElementById('bar-tech').style.width = (c.technical/40*100) + '%';
+  document.getElementById('bar-fund').style.width = (c.fundamental/35*100) + '%';
+  document.getElementById('bar-macro').style.width = (c.macro/15*100) + '%';
+  document.getElementById('bar-cat').style.width = (c.catalyst/10*100) + '%';
+
+  drawChart(data.chart, currentRange);
+
+  const summary = data.explanation.summary || t.no_summary;
+  document.getElementById('company-summary').textContent = summary;
+  document.getElementById('company-summary').classList.remove('expanded');
+  document.getElementById('expand-btn').textContent = t.expand_more;
+  document.getElementById('expand-btn').style.display = summary.length > 250 ? 'block' : 'none';
+
+  renderExpectations(data.expectations);
+  renderDrivers(data.explanation);
+  renderNews(data.news);
+  renderKeyMetrics(data.explanation.key_metrics);
+}
+
+function drawChart(chartData, range) {
+  if (chartInstance) chartInstance.destroy();
+  const d = chartData[range];
+  const ctx = document.getElementById('price-chart').getContext('2d');
+  const isUp = d.values[d.values.length-1] >= d.values[0];
+  const color = isUp ? '#34d399' : '#f87171';
+  const fillColor = isUp ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)';
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels: d.labels, datasets: [{
+      label: lastResult.ticker, data: d.values,
+      borderColor: color, backgroundColor: fillColor,
+      borderWidth: 2.5, fill: true, tension: 0.3,
+      pointRadius: 0, pointHoverRadius: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(15, 15, 35, 0.95)',
+          borderColor: 'rgba(167, 139, 250, 0.3)',
+          borderWidth: 1,
+          callbacks: { label: ctx => '$' + ctx.parsed.y.toFixed(2) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#b0b6c8', font: { size: 10 }, maxTicksLimit: 8 } },
+        y: { grid: { color: 'rgba(167, 139, 250, 0.08)' },
+             ticks: { color: '#b0b6c8', font: { size: 10 }, callback: v => '$' + v } } },
+      interaction: { intersect: false, mode: 'index' } }
+  });
+  document.querySelectorAll('#chart-tabs .tab').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase() === range.toLowerCase());
+  });
+}
+
+function setChartRange(range) {
+  currentRange = range;
+  if (lastResult) drawChart(lastResult.chart, range);
+}
+
+function toggleSummary() {
+  const t = i18n[currentLang];
+  const s = document.getElementById('company-summary');
+  const btn = document.getElementById('expand-btn');
+  s.classList.toggle('expanded');
+  btn.textContent = s.classList.contains('expanded') ? t.expand_less : t.expand_more;
+}
+
+function renderExpectations(exp) {
+  const t = i18n[currentLang];
+  const a = exp.analyst;
+  const ee = exp.earnings_estimate;
+  const v = exp.volatility;
+  const recMap = { 'strong_buy': t.rec_sb, 'buy': t.rec_buy,
+    'hold': t.rec_hold, 'sell': t.rec_sell, 'strong_sell': t.rec_sell, 'none': '—' };
+  document.getElementById('analyst-metrics').innerHTML =
+    '<div class="metric"><div class="metric-label">' + t.analyst_consensus + '</div>' +
+    '<div class="metric-value">' + (recMap[a.recommendation] || '—') + '</div>' +
+    '<div style="font-size:11px;color:var(--text-3);margin-top:2px">' + (a.num_analysts || '—') + ' ' + t.analysts_count + '</div></div>' +
+    '<div class="metric"><div class="metric-label">' + t.target_price + '</div>' +
+    '<div class="metric-value" style="color:var(--success-text)">' + (a.target_mean ? '$' + a.target_mean.toFixed(2) : '—') + '</div>' +
+    '<div style="font-size:11px;color:' + (a.upside_pct >= 0 ? 'var(--success-text)' : 'var(--danger-text)') + ';margin-top:2px">' +
+    (a.upside_pct !== null ? (a.upside_pct >= 0 ? '+' : '') + a.upside_pct + '% ' + t.upside : '—') + '</div></div>' +
+    '<div class="metric"><div class="metric-label">' + t.eps_forward + '</div>' +
+    '<div class="metric-value">' + (ee.next_eps ? '$' + ee.next_eps.toFixed(2) : '—') + '</div></div>' +
+    '<div class="metric"><div class="metric-label">' + t.volatility + '</div>' +
+    '<div class="metric-value">' + v.annualized + '%</div></div>';
+
+  const sc = exp.scenarios;
+  const labels = { bull: t.bull, base: t.base, sideways: t.sideways, bear: t.bear };
+  const colors = { bull: '#34d399', base: '#818cf8', sideways: '#fbbf24', bear: '#f87171' };
+  document.getElementById('scenarios').innerHTML =
+    ['bull','base','sideways','bear'].map(k =>
+      '<div class="scenario"><div class="scenario-row"><span>' + labels[k] +
+      '</span><span style="font-weight:700">' + sc[k].probability + '%</span></div>' +
+      '<div class="scenario-bar"><div class="scenario-fill" style="width:' + sc[k].probability +
+      '%;background:' + colors[k] + ';color:' + colors[k] + '"></div></div></div>'
+    ).join('');
+}
+
+function renderDrivers(exp) {
+  document.getElementById('drivers-pos').innerHTML = (exp.drivers_positive || []).map(d =>
+    '<div class="driver driver-pos"><span class="driver-icon">✓</span>' +
+    '<div><div class="driver-title">' + d.title + '</div>' + d.text + '</div></div>'
+  ).join('');
+  document.getElementById('drivers-neg').innerHTML = (exp.drivers_negative || []).map(d =>
+    '<div class="driver driver-neg"><span class="driver-icon">⚠</span>' +
+    '<div><div class="driver-title">' + d.title + '</div>' + d.text + '</div></div>'
+  ).join('');
+}
+
+function renderNews(news) {
+  const t = i18n[currentLang];
+  const list = document.getElementById('news-list');
+  if (!news || news.length === 0) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--text-2);text-align:center;padding:16px">' + t.no_news + '</div>';
+    return;
+  }
+  const sentLabel = { positive: '🟢 ' + t.sentiment_pos, negative: '🔴 ' + t.sentiment_neg, neutral: '🟡 ' + t.sentiment_neu };
+  list.innerHTML = news.map(n =>
+    '<div class="news-item ' + n.sentiment + '" onclick="' + (n.url ? "window.open('" + n.url + "', '_blank')" : '') + '">' +
+    '<div style="flex:1;min-width:0"><div class="news-title">' + n.title + '</div>' +
+    '<div class="news-meta">' + n.publisher + ' · ' + timeAgo(n.published) + ' · ' + sentLabel[n.sentiment] + '</div></div></div>'
+  ).join('');
+}
+
+function renderKeyMetrics(km) {
+  const t = i18n[currentLang];
+  const items = [
+    { label: t.market_cap, value: km.market_cap ? '$' + fmt(km.market_cap) : '—' },
+    { label: t.pe, value: km.pe_ratio ? km.pe_ratio.toFixed(1) : '—' },
+    { label: t.forward_pe, value: km.forward_pe ? km.forward_pe.toFixed(1) : '—' },
+    { label: t.beta, value: km.beta ? km.beta.toFixed(2) : '—' },
+    { label: t.dividend, value: km.dividend_yield ? (km.dividend_yield*100).toFixed(2) + '%' : '—' },
+    { label: t.high52, value: km['52w_high'] ? '$' + km['52w_high'].toFixed(2) : '—' },
+    { label: t.low52, value: km['52w_low'] ? '$' + km['52w_low'].toFixed(2) : '—' },
+    { label: t.avg_vol, value: km.avg_volume ? fmt(km.avg_volume) : '—' },
+  ];
+  document.getElementById('key-metrics').innerHTML = items.map(i =>
+    '<div class="metric"><div class="metric-label">' + i.label + '</div>' +
+    '<div class="metric-value">' + i.value + '</div></div>'
+  ).join('');
+}
+
+setLang('de');
+</script>
+
+</body>
+</html>
