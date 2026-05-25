@@ -1,6 +1,6 @@
-"""Stock Explosion Scorer Pro+ - Mit Prognosen, Top Picks, Erweiterte Analyse & Smart-Filter"""
+"""Stock Explosion Scorer Pro++ - Mit Groq AI Integration"""
 from __future__ import annotations
-import sys, json, logging, math, time
+import sys, json, logging, math, time, os
 from datetime import datetime, timedelta
 from functools import lru_cache
 import numpy as np
@@ -9,17 +9,34 @@ import yfinance as yf
 from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 
+# Groq AI Integration
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    print("WARNING: groq library not available")
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("scorer")
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
 
+# Groq client
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+groq_client = None
+if GROQ_AVAILABLE and GROQ_API_KEY:
+    try:
+        groq_client = Groq(api_key=GROQ_API_KEY)
+        log.info("Groq client initialized")
+    except Exception as e:
+        log.warning(f"Groq init failed: {e}")
+
 # Cache fuer Top Picks (max 1 Stunde)
 _top_picks_cache = {"data": None, "timestamp": 0}
-_CACHE_TTL = 3600  # 1 Stunde
+_CACHE_TTL = 3600
 
-# Beliebte Aktien fuer den Top Picks Scanner
 POPULAR_TICKERS = [
     "NVDA", "AAPL", "MSFT", "GOOGL", "META", "AMZN", "TSLA", "AMD",
     "AVGO", "ORCL", "CRM", "ADBE", "NFLX", "INTC", "QCOM", "TXN",
@@ -123,7 +140,7 @@ def _eps(d):
     return []
 
 
-# === 19 BEDINGUNGEN ===
+# === 19 BEDINGUNGEN (unverändert) ===
 
 def c1(d):
     c = float(d.close.iloc[-1])
@@ -306,8 +323,6 @@ CAT_OF = {1:0,2:0,3:0,4:0,5:0,6:0, 7:1,8:1,9:1,10:1,11:1,12:1,
           13:2,14:2,15:2,16:2,17:2, 18:3,19:3}
 
 
-# === EXISTING HELPER FUNCTIONS ===
-
 def get_chart_data(d):
     def slice_data(days):
         s = d.close.iloc[-days:] if len(d.close) >= days else d.close
@@ -398,54 +413,33 @@ def get_expectations(d, total_score):
             "bear": {"probability": bear}}}
 
 
-# === NEW: PAKET 1 — MULTI-TIMEFRAME FORECAST ===
-
 def get_forecast(d, total_score, categories):
-    """Berechnet konkrete %-Prognosen fuer 1 Woche, 1 Monat, Jahresende.
-    Mit Bereichen und Konfidenz."""
     info = d.info
     current = float(d.close.iloc[-1])
-
-    # Faktoren sammeln
-    score_factor = total_score / 100.0  # 0..1
-
-    # Analyst Upside
+    score_factor = total_score / 100.0
     target_mean = info.get("targetMeanPrice")
     analyst_upside = 0.0
     if target_mean and current > 0:
         analyst_upside = (target_mean / current) - 1
-        analyst_upside = max(-0.5, min(0.5, analyst_upside))  # cap at +-50%
-
-    # Momentum (12M Return)
+        analyst_upside = max(-0.5, min(0.5, analyst_upside))
     momentum_12m = _ret(d.close, 252)
     if np.isnan(momentum_12m):
         momentum_12m = 0.0
-    momentum_factor = max(-0.5, min(0.5, momentum_12m))  # cap
-
-    # Sector Strength
+    momentum_factor = max(-0.5, min(0.5, momentum_12m))
     sector_factor = 0.0
     if not d.sector_etf.empty and not d.spy.empty:
         sr = _ret(d.sector_etf["Close"], 252)
         br = _ret(d.spy["Close"], 252)
         if not (np.isnan(sr) or np.isnan(br)):
             sector_factor = max(-0.2, min(0.2, sr - br))
-
-    # Market Trend
     market_factor = 0.0
     if not d.spy.empty:
         spy_ret = _ret(d.spy["Close"], 252)
         if not np.isnan(spy_ret):
             market_factor = max(-0.3, min(0.3, spy_ret))
-
-    # Volatilitaet
     rets = d.close.pct_change().dropna()
     vol_ann = float(rets.std() * math.sqrt(252)) if len(rets) > 30 else 0.30
-
-    # === Berechne erwartete 12M-Rendite ===
-    # Wenn Score schwach (< 30) -> negative Rendite
-    # Wenn Score stark (> 70) -> positive Rendite
-    score_contribution = (score_factor - 0.5) * 0.6  # -0.3 bis +0.3
-
+    score_contribution = (score_factor - 0.5) * 0.6
     expected_12m = (
         0.35 * score_contribution +
         0.25 * analyst_upside +
@@ -453,57 +447,35 @@ def get_forecast(d, total_score, categories):
         0.10 * sector_factor +
         0.10 * market_factor
     )
-
-    # Skaliere auf die Zeitrahmen
-    # 1 Woche = etwa 1/52 des Jahres, aber wir nehmen 0.18 weil Setups oft in der Anfangswoche stark performen
-    # 1 Monat = etwa 0.40, weil das meiste Setup-Movement in den ersten Wochen passiert
-    # Jahresende: skaliert nach verbleibenden Tagen im Jahr
     today = datetime.now()
     days_to_year_end = (datetime(today.year, 12, 31) - today).days
     days_to_year_end = max(30, min(365, days_to_year_end))
     yearend_scale = days_to_year_end / 365.0
-
     forecasts = {
         "1w":  {"days": 7,   "scale": 0.18},
         "1m":  {"days": 30,  "scale": 0.40},
         "yearend": {"days": days_to_year_end, "scale": yearend_scale * 0.85},
     }
-
     result = {}
     for key, cfg in forecasts.items():
         expected_pct = expected_12m * cfg["scale"]
-        # Range basierend auf Volatilitaet und Zeitrahmen
         time_factor = math.sqrt(cfg["days"] / 252.0)
         std_dev = vol_ann * time_factor
-        # 1-sigma Range
         low_pct = expected_pct - std_dev
         high_pct = expected_pct + std_dev
-
-        # Probability up (basierend auf erwartetem Wert und Vol)
         if std_dev > 0:
             z = expected_pct / std_dev
-            # Approximation Normalverteilung CDF
             prob_up = 0.5 * (1 + math.erf(z / math.sqrt(2)))
         else:
             prob_up = 0.5 if expected_pct == 0 else (1.0 if expected_pct > 0 else 0.0)
         prob_up = max(0.05, min(0.95, prob_up))
-
-        # Target price
         target_price = current * (1 + expected_pct)
         target_date = (today + timedelta(days=cfg["days"])).strftime("%Y-%m-%d")
-
-        # Direction signal
-        if expected_pct > 0.10:
-            direction = "strong_up"
-        elif expected_pct > 0.03:
-            direction = "up"
-        elif expected_pct > -0.03:
-            direction = "neutral"
-        elif expected_pct > -0.10:
-            direction = "down"
-        else:
-            direction = "strong_down"
-
+        if expected_pct > 0.10: direction = "strong_up"
+        elif expected_pct > 0.03: direction = "up"
+        elif expected_pct > -0.03: direction = "neutral"
+        elif expected_pct > -0.10: direction = "down"
+        else: direction = "strong_down"
         result[key] = {
             "expected_pct": round(expected_pct * 100, 2),
             "low_pct": round(low_pct * 100, 2),
@@ -514,18 +486,13 @@ def get_forecast(d, total_score, categories):
             "direction": direction,
             "days": cfg["days"],
         }
-
-    # Data quality flag
     data_quality = "high"
     missing = 0
     if target_mean is None: missing += 1
     if d.q_earnings.empty: missing += 1
     if not info.get("revenueGrowth"): missing += 1
-    if missing >= 2:
-        data_quality = "low"
-    elif missing == 1:
-        data_quality = "medium"
-
+    if missing >= 2: data_quality = "low"
+    elif missing == 1: data_quality = "medium"
     return {
         "forecasts": result,
         "data_quality": data_quality,
@@ -594,14 +561,9 @@ def get_explanation(d, conditions, categories):
             "avg_volume": info.get("averageVolume")}}
 
 
-# === NEW: PAKET 3 — EXTENDED ANALYSIS ===
-
 def get_extended_analysis(d):
-    """Erweiterte Analyse: Insider, Short-Interest, Earnings Date, etc."""
     info = d.info
     yf_obj = d._yf
-
-    # Short Interest
     short_data = {
         "short_ratio": info.get("shortRatio"),
         "short_percent_of_float": info.get("shortPercentOfFloat"),
@@ -610,8 +572,6 @@ def get_extended_analysis(d):
     }
     if short_data["short_percent_of_float"]:
         short_data["short_percent_of_float"] = round(short_data["short_percent_of_float"] * 100, 2)
-
-    # Insider Activity
     insider_data = {
         "insider_ownership_pct": info.get("heldPercentInsiders"),
         "institution_ownership_pct": info.get("heldPercentInstitutions"),
@@ -621,16 +581,12 @@ def get_extended_analysis(d):
         insider_data["insider_ownership_pct"] = round(insider_data["insider_ownership_pct"] * 100, 2)
     if insider_data["institution_ownership_pct"]:
         insider_data["institution_ownership_pct"] = round(insider_data["institution_ownership_pct"] * 100, 2)
-
-    # Cash Flow
     cashflow_data = {
         "operating_cashflow": info.get("operatingCashflow"),
         "free_cashflow": info.get("freeCashflow"),
         "total_cash": info.get("totalCash"),
         "total_debt": info.get("totalDebt"),
     }
-
-    # Earnings Date
     earnings_date = None
     try:
         cal = yf_obj.calendar
@@ -638,15 +594,13 @@ def get_extended_analysis(d):
             if isinstance(cal, dict):
                 ed = cal.get("Earnings Date")
                 if ed and isinstance(ed, list) and len(ed) > 0:
-                    earnings_date = str(ed[0]) if hasattr(ed[0], 'strftime') else None
                     if hasattr(ed[0], 'strftime'):
                         earnings_date = ed[0].strftime("%Y-%m-%d")
+                    else:
+                        earnings_date = str(ed[0])
     except Exception as e:
         log.warning(f"Earnings date fetch failed: {e}")
-
-    # Competitors (basierend auf Sektor)
     competitors = []
-    sector = (info.get("sector") or "").lower()
     industry = (info.get("industry") or "").lower()
     competitor_map = {
         "semiconductors": ["NVDA", "AMD", "INTC", "AVGO", "QCOM", "TSM"],
@@ -678,7 +632,6 @@ def get_extended_analysis(d):
                     })
             except Exception as e:
                 log.warning(f"Competitor {comp_ticker} failed: {e}")
-
     return {
         "short_interest": short_data,
         "insider": insider_data,
@@ -688,7 +641,216 @@ def get_extended_analysis(d):
     }
 
 
-def score_ticker(ticker):
+# === NEU: GROQ AI ANALYSIS ===
+
+def get_ai_analysis(data, lang="de"):
+    """Nutzt Groq AI um eine intelligente Analyse zu generieren."""
+    if not groq_client:
+        return {"available": False, "error": "Groq not configured"}
+    
+    lang_instructions = {
+        "de": "Antworte auf DEUTSCH. Verwende einfache, klare Sprache.",
+        "en": "Reply in ENGLISH. Use simple, clear language.",
+        "ar": "أجب باللغة العربية. استخدم لغة بسيطة وواضحة."
+    }
+    
+    instruction = lang_instructions.get(lang, lang_instructions["de"])
+    
+    # Daten zusammenfassen fuer Prompt
+    company = data.get("company", data["ticker"])
+    score = data["total_score"]
+    rec = data["recommendation"]
+    price = data["current_price"]
+    sector = data.get("sector", "Unknown")
+    cats = data["categories"]
+    fc = data["forecast"]["forecasts"]
+    
+    # News-Stimmung
+    news = data.get("news", [])
+    pos_news = sum(1 for n in news if n.get("sentiment") == "positive")
+    neg_news = sum(1 for n in news if n.get("sentiment") == "negative")
+    
+    # Earnings Date
+    ed = data.get("extended", {}).get("earnings_date")
+    
+    prompt = f"""Du bist ein erfahrener Aktien-Analyst. Analysiere {company} ({data['ticker']}).
+
+DATEN:
+- Aktueller Kurs: ${price}
+- Sektor: {sector}
+- Score: {score}/100 (Empfehlung: {rec})
+- Technical: {cats['technical']}/40, Fundamental: {cats['fundamental']}/35, Macro: {cats['macro']}/15, Catalyst: {cats['catalyst']}/10
+- Prognose 1 Woche: {fc['1w']['expected_pct']}%, 1 Monat: {fc['1m']['expected_pct']}%, Jahresende: {fc['yearend']['expected_pct']}%
+- News-Stimmung: {pos_news} positiv / {neg_news} negativ
+- Naechste Earnings: {ed if ed else 'Unbekannt'}
+
+{instruction}
+
+Gib eine kurze, strukturierte Analyse mit GENAU diesem JSON-Format zurueck (keine zusaetzlichen Erklaerungen, NUR das JSON):
+
+{{
+  "story": "Was macht diese Firma? In 2 einfachen Saetzen.",
+  "strengths": ["Staerke 1", "Staerke 2", "Staerke 3"],
+  "risks": ["Risiko 1", "Risiko 2", "Risiko 3"],
+  "recommendation": "BUY" oder "WAIT" oder "AVOID",
+  "confidence": Zahl von 1-100,
+  "entry_price": "Bei welchem Preis einsteigen",
+  "target_price": "Kursziel in Dollar",
+  "stop_loss": "Stop-Loss Preis",
+  "timeframe": "Empfohlene Haltedauer",
+  "earnings_warning": "Earnings-Risiko in 1-2 Saetzen (sell the news?)",
+  "verdict": "Finale Bewertung in 1 Satz"
+}}"""
+
+    try:
+        completion = groq_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "Du bist ein erfahrener Aktien-Analyst. Antworte IMMER mit gueltigem JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.5,
+            max_tokens=1500,
+        )
+        response_text = completion.choices[0].message.content.strip()
+        
+        # JSON aus der Antwort extrahieren
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        # Versuche JSON zu parsen
+        try:
+            ai_data = json.loads(response_text)
+            return {"available": True, "data": ai_data}
+        except json.JSONDecodeError:
+            log.warning(f"AI returned invalid JSON: {response_text[:200]}")
+            return {"available": True, "raw_text": response_text}
+            
+    except Exception as e:
+        log.exception(f"Groq AI failed: {e}")
+        return {"available": False, "error": str(e)}
+
+
+def get_smart_copy_prompt(data, lang="de"):
+    """Erstellt einen detaillierten Prompt fuer Claude.ai / ChatGPT."""
+    company = data.get("company", data["ticker"])
+    score = data["total_score"]
+    rec = data["recommendation"]
+    price = data["current_price"]
+    sector = data.get("sector", "Unknown")
+    cats = data["categories"]
+    fc = data["forecast"]["forecasts"]
+    
+    conditions_text = "\n".join([
+        f"  C{c['id']}: {c['score']}/{c['max']} - {c['detail']}"
+        for c in data["conditions"] if c.get("evaluable", True)
+    ])
+    
+    news_text = "\n".join([
+        f"  - [{n['sentiment'].upper()}] {n['title']}"
+        for n in data.get("news", [])[:5]
+    ]) or "  Keine aktuellen News"
+    
+    competitors_text = "\n".join([
+        f"  - {c['ticker']}: ${c['price']}, 12M: {c['return_1y']}%"
+        for c in data.get("extended", {}).get("competitors", [])
+    ]) or "  Keine Konkurrenz-Daten"
+    
+    drivers_pos = "\n".join([f"  + {d['title']}: {d['text']}" 
+                              for d in data.get("explanation", {}).get("drivers_positive", [])])
+    drivers_neg = "\n".join([f"  - {d['title']}: {d['text']}" 
+                              for d in data.get("explanation", {}).get("drivers_negative", [])])
+    
+    ed = data.get("extended", {}).get("earnings_date", "Unbekannt")
+    ext = data.get("extended", {})
+    
+    lang_question = {
+        "de": "Bitte gib mir eine tiefgehende Aktien-Analyse auf Deutsch. Beantworte:",
+        "en": "Please give me a deep stock analysis in English. Answer:",
+        "ar": "من فضلك أعطني تحليل عميق للسهم بالعربية. أجب على:"
+    }
+    
+    questions = {
+        "de": """1. Was macht diese Firma genau? (in einfachen Worten)
+2. Sollte ich jetzt KAUFEN, WARTEN oder VERKAUFEN? Mit Begruendung!
+3. Wenn KAUFEN: Bei welchem Preis einsteigen? Zielpreis? Stop-Loss?
+4. Was sind die 3 wichtigsten Risiken?
+5. Wird die Aktie nach den naechsten Earnings steigen oder fallen? Warum?
+6. Vergleich zu Konkurrenten - ist diese die beste Wahl?
+7. Wie lange sollte ich die Aktie halten?
+8. Gib eine finale Einschaetzung mit Konfidenz-Prozent.""",
+        "en": """1. What does this company exactly do? (in simple words)
+2. Should I BUY, WAIT or SELL now? With reasoning!
+3. If BUY: At what price to enter? Target? Stop-loss?
+4. What are the 3 biggest risks?
+5. Will the stock go up or down after next earnings? Why?
+6. Comparison with competitors - is this the best choice?
+7. How long should I hold the stock?
+8. Give a final assessment with confidence percent.""",
+        "ar": """1. ماذا تفعل هذه الشركة بالضبط؟ (بكلمات بسيطة)
+2. هل يجب أن أشتري الآن أم أنتظر أم أبيع؟ مع التفسير!
+3. إذا كان شراء: بأي سعر؟ الهدف؟ وقف الخسارة؟
+4. ما هي أكبر 3 مخاطر؟
+5. هل سيرتفع السهم أم ينخفض بعد الأرباح القادمة؟ لماذا؟
+6. المقارنة مع المنافسين - هل هذا الخيار الأفضل؟
+7. كم من الوقت يجب أن أحتفظ بالسهم؟
+8. أعط تقييمًا نهائيًا مع نسبة الثقة."""
+    }
+    
+    prompt = f"""{lang_question.get(lang, lang_question['de'])}
+
+=== AKTIEN-DATEN: {company} ({data['ticker']}) ===
+
+GRUNDDATEN:
+- Aktueller Kurs: ${price}
+- Sektor: {sector}
+- Industrie: {data.get('industry', 'Unknown')}
+
+GESAMT-SCORE: {score}/100 ({rec})
+
+KATEGORIEN:
+- Technical: {cats['technical']}/40
+- Fundamental: {cats['fundamental']}/35
+- Macro: {cats['macro']}/15
+- Catalyst: {cats['catalyst']}/10
+
+DETAILS DER 19 BEDINGUNGEN:
+{conditions_text}
+
+PROGNOSEN:
+- 1 Woche: {fc['1w']['expected_pct']}% (Ziel: ${fc['1w']['target_price']})
+- 1 Monat: {fc['1m']['expected_pct']}% (Ziel: ${fc['1m']['target_price']})
+- Jahresende: {fc['yearend']['expected_pct']}% (Ziel: ${fc['yearend']['target_price']})
+
+STAERKEN:
+{drivers_pos if drivers_pos else '  Keine erkannt'}
+
+SCHWAECHEN:
+{drivers_neg if drivers_neg else '  Keine erkannt'}
+
+AKTUELLE NEWS:
+{news_text}
+
+KONKURRENTEN:
+{competitors_text}
+
+WEITERE DATEN:
+- Naechste Earnings: {ed}
+- Insider-Besitz: {ext.get('insider', {}).get('insider_ownership_pct', '?')}%
+- Short Interest: {ext.get('short_interest', {}).get('short_percent_of_float', '?')}%
+
+=== FRAGEN ===
+
+{questions.get(lang, questions['de'])}
+
+Bitte sei konkret, ehrlich und gib mir handlungsrelevante Tipps. Danke!"""
+    
+    return prompt
+
+
+def score_ticker(ticker, lang="de"):
     d = MarketData(ticker)
     results = []
     for fn in ALL:
@@ -707,7 +869,8 @@ def score_ticker(ticker):
     current = float(d.close.iloc[-1])
     change = current - prev_close
     change_pct = (change / prev_close * 100) if prev_close > 0 else 0
-    return {
+    
+    data = {
         "ticker": d.ticker,
         "company": d.info.get("longName") or d.info.get("shortName") or d.ticker,
         "sector": d.info.get("sector") or "Unknown",
@@ -729,10 +892,17 @@ def score_ticker(ticker):
         "forecast": get_forecast(d, total, categories),
         "extended": get_extended_analysis(d),
     }
+    
+    # AI Analyse hinzufuegen
+    data["ai_analysis"] = get_ai_analysis(data, lang)
+    
+    # Smart-Copy Prompt vorbereiten
+    data["smart_copy_prompt"] = get_smart_copy_prompt(data, lang)
+    
+    return data
 
 
 def quick_score(ticker):
-    """Schnellere Version fuer Top Picks Scan - nur Total Score und Basis-Info."""
     try:
         d = MarketData(ticker)
         results = []
@@ -774,7 +944,8 @@ def index(): return send_from_directory(".", "index.html")
 
 @app.route("/api/score/<ticker>")
 def api_score(ticker):
-    try: return jsonify(score_ticker(ticker))
+    lang = request.args.get("lang", "de")
+    try: return jsonify(score_ticker(ticker, lang))
     except ValueError as e: return jsonify({"error": str(e)}), 404
     except Exception as e:
         log.exception("Failed")
@@ -782,24 +953,17 @@ def api_score(ticker):
 
 @app.route("/api/top-picks")
 def api_top_picks():
-    """Scannt populaere Aktien und gibt Top Picks zurueck."""
     global _top_picks_cache
     now = time.time()
-    # Cache check
     if _top_picks_cache["data"] and (now - _top_picks_cache["timestamp"] < _CACHE_TTL):
         return jsonify(_top_picks_cache["data"])
-
     log.info("Scanning popular tickers for Top Picks...")
     results = []
     for tk in POPULAR_TICKERS:
         r = quick_score(tk)
-        if r:
-            results.append(r)
-        time.sleep(0.05)  # rate limit protection
-
-    # Sort by score
+        if r: results.append(r)
+        time.sleep(0.05)
     results.sort(key=lambda x: x["score"], reverse=True)
-
     response = {
         "scanned": len(POPULAR_TICKERS),
         "evaluated": len(results),
@@ -810,11 +974,11 @@ def api_top_picks():
     return jsonify(response)
 
 @app.route("/api/health")
-def health(): return jsonify({"status":"ok","time":datetime.now().isoformat()})
+def health(): 
+    return jsonify({"status":"ok","time":datetime.now().isoformat(),"groq":groq_client is not None})
 
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n  Stock Explosion Scorer Pro+ -> http://localhost:{port}\n")
+    print(f"\n  Stock Explosion Scorer Pro++ -> http://localhost:{port}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
