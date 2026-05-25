@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stock Explosion Scorer Pro+</title>
+<title>Stock Explosion Scorer Pro++ AI</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,6 +19,7 @@
   --warning-bg: rgba(251,191,36,0.18); --warning-text: #fcd34d;
   --danger-bg: rgba(248,113,113,0.18); --danger-text: #fca5a5;
   --pink-bg: rgba(244,114,182,0.18); --pink-text: #f9a8d4;
+  --ai-bg: rgba(167,139,250,0.15);
 }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -124,6 +125,10 @@ h1 {
   padding: 18px; margin-bottom: 16px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 }
+.card-ai {
+  background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(244,114,182,0.10));
+  border: 1px solid rgba(167,139,250,0.4);
+}
 .card-header {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 12px; font-size: 14px; font-weight: 600;
@@ -176,12 +181,68 @@ h1 {
 .metric { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
 .metric-label { font-size: 11px; color: var(--text-2); }
 .metric-value { font-size: 16px; font-weight: 600; margin-top: 2px; }
-.scenario { margin-bottom: 12px; }
-.scenario-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-.scenario-bar { height: 10px; background: rgba(0,0,0,0.4); border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
-.scenario-fill { height: 100%; transition: width 0.7s; box-shadow: 0 0 8px currentColor; }
 
-/* === NEW: FORECAST CARDS === */
+/* AI ANALYSIS STYLES */
+.ai-rec-big {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px; background: rgba(0,0,0,0.25); border-radius: 12px;
+  margin-bottom: 12px;
+}
+.ai-rec-icon { font-size: 36px; }
+.ai-rec-text { flex: 1; }
+.ai-rec-action { font-size: 22px; font-weight: 700; }
+.ai-rec-confidence { font-size: 12px; color: var(--text-2); }
+.ai-rec-buy { color: var(--green); }
+.ai-rec-wait { color: var(--amber); }
+.ai-rec-avoid { color: var(--red); }
+.ai-prices {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;
+}
+.ai-price-box {
+  background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; text-align: center;
+}
+.ai-price-label { font-size: 10px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.5px; }
+.ai-price-value { font-size: 16px; font-weight: 700; margin-top: 4px; }
+.ai-story {
+  font-size: 13px; line-height: 1.7; padding: 12px;
+  background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 12px;
+  color: var(--text-2);
+}
+.ai-list-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.ai-list-box { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; }
+.ai-list-title { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.ai-list-title.pos { color: var(--success-text); }
+.ai-list-title.neg { color: var(--danger-text); }
+.ai-list-item { font-size: 12px; padding: 4px 0; line-height: 1.5; color: var(--text-2); }
+.ai-warning {
+  padding: 12px; background: var(--warning-bg); border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 8px; font-size: 12px; color: var(--warning-text); line-height: 1.6;
+  margin-bottom: 12px;
+}
+.ai-verdict {
+  padding: 12px; background: rgba(167,139,250,0.2); border-radius: 8px;
+  font-size: 13px; line-height: 1.6; color: var(--text);
+  border-left: 3px solid var(--accent);
+}
+.ai-unavailable {
+  padding: 20px; text-align: center; color: var(--text-3); font-size: 13px;
+}
+
+/* SMART-COPY BUTTON */
+.smart-copy-card {
+  background: linear-gradient(135deg, rgba(244,114,182,0.10), rgba(167,139,250,0.10));
+  border: 1px dashed rgba(167,139,250,0.5);
+}
+.btn-smart-copy {
+  width: 100%; padding: 14px; font-size: 14px; font-weight: 600;
+  background: linear-gradient(135deg, #f472b6 0%, #a78bfa 100%);
+  color: white; border: none; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-smart-copy:hover { transform: translateY(-1px); }
+.btn-smart-copy.copied { background: linear-gradient(135deg, #34d399, #10b981); }
+
+/* FORECAST CARDS */
 .forecast-grid { display: grid; gap: 10px; }
 .forecast-card {
   display: grid; grid-template-columns: 100px 1fr 60px;
@@ -198,25 +259,20 @@ h1 {
 .forecast-target { font-size: 11px; color: var(--text-2); margin-top: 2px; }
 .forecast-arrow { text-align: center; font-size: 24px; font-weight: 700; }
 .forecast-arrow-label { font-size: 10px; color: var(--text-2); }
-
 .up-strong { color: var(--green); }
 .up-normal { color: var(--success-text); }
 .neutral { color: var(--text-2); }
 .down-normal { color: var(--danger-text); }
 .down-strong { color: var(--red); }
 
-/* === NEW: TOP PICKS === */
-.top-picks-table {
-  width: 100%; border-collapse: collapse; font-size: 13px;
-}
+/* TOP PICKS */
+.top-picks-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .top-picks-table th {
   padding: 10px 8px; text-align: left; font-size: 11px;
   color: var(--text-2); border-bottom: 1px solid var(--border);
   font-weight: 500; text-transform: uppercase;
 }
-.top-picks-table td {
-  padding: 10px 8px; border-bottom: 1px solid var(--border);
-}
+.top-picks-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
 .top-picks-table tr:hover { background: rgba(167,139,250,0.05); cursor: pointer; }
 .top-picks-table .ticker-cell { font-weight: 700; }
 .top-picks-table .score-cell { font-weight: 700; font-size: 14px; }
@@ -224,8 +280,6 @@ h1 {
 .score-watch { color: var(--amber); }
 .score-neutral { color: var(--text-2); }
 .score-avoid { color: var(--red); }
-
-/* === NEW: SMART FILTERS === */
 .filter-bar {
   display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
   padding: 12px; background: var(--surface-2);
@@ -236,15 +290,7 @@ h1 {
   color: var(--text-2); border: 1px solid var(--border);
   border-radius: 6px; cursor: pointer;
 }
-.filter-chip.active {
-  background: var(--accent); color: white; border-color: var(--accent);
-}
-.filter-input {
-  padding: 4px 10px; font-size: 12px; background: var(--surface);
-  color: var(--text); border: 1px solid var(--border);
-  border-radius: 6px; outline: none; width: 120px;
-}
-
+.filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
 .news-item {
   display: flex; gap: 12px; padding: 12px 14px;
   background: var(--surface-2); border: 1px solid var(--border);
@@ -274,11 +320,12 @@ h1 {
 .competitor-row { display: grid; grid-template-columns: 1fr 80px 80px 100px; gap: 8px; padding: 10px; background: var(--surface-2); border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
 .competitor-name { font-weight: 600; }
 .competitor-meta { font-size: 11px; color: var(--text-3); }
-
 @media (max-width: 600px) {
   .price-block { text-align: start; }
   .forecast-card { grid-template-columns: 90px 1fr 50px; gap: 8px; }
   .forecast-pct { font-size: 18px; }
+  .ai-list-grid { grid-template-columns: 1fr; }
+  .ai-prices { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -287,8 +334,8 @@ h1 {
 
 <header>
   <div>
-    <h1 id="app-title">📊 Stock Explosion Scorer Pro+</h1>
-    <div class="subtitle" id="app-subtitle">Live · Prognosen · Top Picks · Erweiterte Analyse</div>
+    <h1 id="app-title">🚀 Stock Scorer Pro++ AI</h1>
+    <div class="subtitle" id="app-subtitle">KI-Analyse · Live · Prognosen · Top Picks</div>
   </div>
   <div class="lang-switch">
     <button class="lang-btn active" data-lang="de" onclick="setLang('de')">🇩🇪 DE</button>
@@ -316,8 +363,6 @@ h1 {
 
 <div id="error-box"></div>
 <div id="loading-box"></div>
-
-<!-- TOP PICKS SECTION -->
 <div id="toppicks-box" style="display:none;"></div>
 
 <div id="result-box" style="display:none;">
@@ -333,6 +378,28 @@ h1 {
         <div class="price-change" id="price-change"></div>
       </div>
     </div>
+  </div>
+
+  <!-- AI ANALYSIS CARD (NEU!) -->
+  <div class="card card-ai" id="ai-card">
+    <div class="card-header">
+      <span id="lbl-ai">🤖 KI-Analyse (Groq AI)</span>
+      <span style="font-size:11px;color:var(--text-3);" id="lbl-ai-powered">Powered by Llama 3.3</span>
+    </div>
+    <div id="ai-content"></div>
+  </div>
+
+  <!-- SMART COPY CARD (NEU!) -->
+  <div class="card smart-copy-card">
+    <div class="card-header">
+      <span id="lbl-smart-copy">🧠 Tiefe Analyse mit Claude.ai oder ChatGPT</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.5;" id="lbl-smart-copy-desc">
+      Klicke um eine komplette Analyse-Anfrage zu kopieren. Dann in Claude.ai oder ChatGPT einfügen für tiefe Profi-Analyse.
+    </div>
+    <button class="btn-smart-copy" id="smart-copy-btn" onclick="copySmartPrompt()">
+      <span id="smart-copy-text">📋 Analyse-Anfrage kopieren</span>
+    </button>
   </div>
 
   <div class="card">
@@ -379,20 +446,18 @@ h1 {
     </div>
   </div>
 
-  <!-- NEW: FORECAST CARD -->
   <div class="card">
     <div class="card-header">
-      <span id="lbl-forecast">🔮 Kursprognose — Konkrete Schätzung</span>
+      <span id="lbl-forecast">🔮 Kursprognose</span>
       <span id="data-quality-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 6px;"></span>
     </div>
     <div id="forecast-cards" class="forecast-grid"></div>
     <div class="disclaimer" style="margin-top: 12px;">
       <strong id="lbl-forecast-warn">⚠️ Wichtig:</strong>
-      <span id="lbl-forecast-warn-text">Diese Zahlen sind algorithmische Schätzungen, keine Garantien. Echte Kurse können komplett anders laufen. Treffsicherheit historisch: ~55-65% bei der Richtung.</span>
+      <span id="lbl-forecast-warn-text">Schätzungen, keine Garantien.</span>
     </div>
   </div>
 
-  <!-- NEW: EXTENDED ANALYSIS -->
   <div class="card">
     <div class="card-header"><span id="lbl-extended">📈 Erweiterte Analyse</span></div>
     <div id="extended-content"></div>
@@ -401,7 +466,7 @@ h1 {
   <div class="card">
     <div class="card-header"><span id="lbl-about">📚 Über das Unternehmen</span></div>
     <div class="summary-text" id="company-summary"></div>
-    <button class="expand-btn" id="expand-btn" onclick="toggleSummary()">▼ Mehr anzeigen</button>
+    <button class="expand-btn" id="expand-btn" onclick="toggleSummary()">▼ Mehr</button>
   </div>
 
   <div class="card">
@@ -411,10 +476,7 @@ h1 {
   </div>
 
   <div class="card">
-    <div class="card-header">
-      <span id="lbl-news">📰 Aktuelle Nachrichten</span>
-      <span style="font-size: 11px; color: var(--text-3);" id="lbl-news-source">Live von Yahoo Finance</span>
-    </div>
+    <div class="card-header"><span id="lbl-news">📰 Aktuelle News</span></div>
     <div id="news-list"></div>
   </div>
 
@@ -425,7 +487,7 @@ h1 {
 
   <div class="disclaimer">
     <strong id="lbl-disclaimer-title">⚠️ Hinweis:</strong>
-    <span id="lbl-disclaimer">Score 80+ = hohe Konfluenz historischer Setup-Bedingungen. Dies ist keine Anlageberatung. Eigene Recherche und Risikomanagement bleiben deine Verantwortung.</span>
+    <span id="lbl-disclaimer">Keine Anlageberatung. Eigene Recherche bleibt deine Verantwortung.</span>
   </div>
 </div>
 
@@ -435,8 +497,8 @@ h1 {
 const i18n = {
   de: {
     dir:'ltr',lang:'de',
-    title:'📊 Stock Explosion Scorer Pro+',
-    subtitle:'Live · Prognosen · Top Picks · Erweiterte Analyse',
+    title:'🚀 Stock Scorer Pro++ AI',
+    subtitle:'KI-Analyse · Live · Prognosen · Top Picks',
     placeholder:'z.B. NVDA, AAPL, TSLA',
     analyze:'Analysieren',analyzing:'Analysiere...',toppicks:'⭐ Top Picks',
     examples:'Beispiele:',total:'Stock Explosion Score',
@@ -444,13 +506,27 @@ const i18n = {
     rec_strong:'🟢 STARKER KAUFKANDIDAT',rec_watch:'🟡 BEOBACHTUNGSLISTE',
     rec_neutral:'⚪ NEUTRAL',rec_avoid:'🔴 MEIDEN',
     chart:'📈 Live-Chart',about:'📚 Über das Unternehmen',
-    forecast:'🔮 Kursprognose — Konkrete Schätzung',
-    extended:'📈 Erweiterte Analyse',
-    drivers:'💡 Was diese Aktie antreibt',news:'📰 Aktuelle Nachrichten',
-    keymetrics:'📊 Kennzahlen',news_source:'Live von Yahoo Finance',
-    expand_more:'▼ Mehr anzeigen',expand_less:'▲ Weniger',
+    forecast:'🔮 Kursprognose',extended:'📈 Erweiterte Analyse',
+    drivers:'💡 Was diese Aktie antreibt',news:'📰 Aktuelle News',
+    keymetrics:'📊 Kennzahlen',
+    ai_title:'🤖 KI-Analyse (Groq AI)',
+    ai_powered:'Powered by Llama 3.3',
+    ai_loading:'KI denkt nach...',
+    ai_unavailable:'KI-Analyse nicht verfügbar. (API-Key prüfen)',
+    ai_story:'📖 Die Geschichte',
+    ai_strengths:'✅ Stärken',ai_risks:'⚠️ Risiken',
+    ai_entry:'Einstieg',ai_target:'Ziel',ai_stop:'Stop-Loss',
+    ai_buy:'KAUFEN',ai_wait:'WARTEN',ai_avoid:'VERKAUFEN',
+    ai_confidence:'Konfidenz',ai_timeframe:'Zeitrahmen:',
+    ai_earnings_warn:'⚠️ Earnings-Warnung:',
+    ai_verdict:'🎯 Finale Bewertung:',
+    smart_copy:'🧠 Tiefe Analyse mit Claude.ai oder ChatGPT',
+    smart_copy_desc:'Klicke um eine komplette Analyse-Anfrage zu kopieren. Dann in Claude.ai oder ChatGPT einfügen.',
+    smart_copy_btn:'📋 Analyse-Anfrage kopieren',
+    smart_copy_done:'✅ Kopiert! Jetzt in Claude.ai einfügen',
+    expand_more:'▼ Mehr',expand_less:'▲ Weniger',
     forecast_warn:'⚠️ Wichtig:',
-    forecast_warn_text:'Diese Zahlen sind algorithmische Schätzungen, keine Garantien. Echte Kurse können komplett anders laufen. Treffsicherheit historisch: ~55-65% bei der Richtung.',
+    forecast_warn_text:'Schätzungen, keine Garantien. Treffsicherheit ~55-65% bei Richtung.',
     data_quality_high:'✓ Hohe Datenqualität',
     data_quality_medium:'⚠ Mittlere Datenqualität',
     data_quality_low:'⚠ Geringe Datenqualität',
@@ -458,47 +534,58 @@ const i18n = {
     fc_range:'Range:',fc_target:'Ziel:',
     fc_up_strong:'Stark ↑',fc_up:'Aufwärts',fc_neutral:'Neutral',
     fc_down:'Abwärts',fc_down_strong:'Stark ↓',
-    ext_short:'🩳 Short-Interest',ext_insider:'👔 Insider & Institutionen',
-    ext_cashflow:'💵 Cash-Flow',ext_earnings:'📅 Nächste Earnings',
-    ext_competitors:'⚔️ Konkurrenten (12M Performance)',
-    short_ratio:'Short Ratio',short_float:'Short % of Float',
+    ext_short:'🩳 Short-Interest',ext_insider:'👔 Insider',ext_cashflow:'💵 Cash-Flow',
+    ext_earnings:'📅 Nächste Earnings',ext_competitors:'⚔️ Konkurrenten (12M)',
+    short_ratio:'Short Ratio',short_float:'Short % Float',
     shares_short:'Shares Short',shares_short_prior:'Vormonat',
-    insider_own:'Insider-Besitz',inst_own:'Institutionen-Besitz',
-    op_cashflow:'Operativer Cashflow',free_cashflow:'Free Cashflow',
+    insider_own:'Insider-Besitz',inst_own:'Institutionen',
+    op_cashflow:'Op. Cashflow',free_cashflow:'Free Cashflow',
     total_cash:'Total Cash',total_debt:'Total Debt',
     market_cap:'Marktkap.',pe:'KGV',forward_pe:'Forward-KGV',
     beta:'Beta',dividend:'Dividende',high52:'52w Hoch',low52:'52w Tief',avg_vol:'Ø Volumen',
-    no_data:'Keine Daten verfügbar',
+    no_data:'Keine Daten',
     sentiment_pos:'Positiv',sentiment_neg:'Negativ',sentiment_neu:'Neutral',
-    no_news:'Keine aktuellen Nachrichten',no_summary:'Keine Beschreibung verfügbar',
-    err_empty:'Bitte einen Ticker eingeben',err_network:'Netzwerkfehler',
-    loading:'Lade Live-Daten',loading_picks:'Scanne 50+ Aktien... (kann 1-2 Min dauern)',
+    no_news:'Keine News',no_summary:'Keine Beschreibung',
+    err_empty:'Bitte Ticker eingeben',err_network:'Netzwerkfehler',
+    loading:'Lade Live-Daten + KI-Analyse',loading_picks:'Scanne 50+ Aktien...',
     disclaimer_title:'⚠️ Hinweis:',
-    disclaimer:'Score 80+ = hohe Konfluenz historischer Setup-Bedingungen. Dies ist keine Anlageberatung. Eigene Recherche und Risikomanagement bleiben deine Verantwortung.',
-    tp_title:'⭐ Top Picks — Beste Aktien jetzt',
-    tp_subtitle:'Sortiert nach Score · Klicken für volle Analyse',
-    tp_filter_all:'Alle',tp_filter_strong:'Score 80+',tp_filter_watch:'65+',tp_filter_tech:'Tech',
+    disclaimer:'Keine Anlageberatung. Eigene Recherche bleibt deine Verantwortung.',
+    tp_title:'⭐ Top Picks',tp_subtitle:'Sortiert nach Score · Klicken für volle Analyse',
+    tp_filter_all:'Alle',tp_filter_strong:'80+',tp_filter_watch:'65+',tp_filter_tech:'Tech',
     tp_col_rank:'#',tp_col_ticker:'Ticker',tp_col_company:'Firma',tp_col_price:'Preis',
     tp_col_score:'Score',tp_col_1w:'1W %',tp_col_1m:'1M %',tp_col_year:'Jahr %',
   },
   en: {
     dir:'ltr',lang:'en',
-    title:'📊 Stock Explosion Scorer Pro+',
-    subtitle:'Live · Forecasts · Top Picks · Advanced Analysis',
+    title:'🚀 Stock Scorer Pro++ AI',
+    subtitle:'AI Analysis · Live · Forecasts · Top Picks',
     placeholder:'e.g. NVDA, AAPL, TSLA',
     analyze:'Analyze',analyzing:'Analyzing...',toppicks:'⭐ Top Picks',
     examples:'Examples:',total:'Stock Explosion Score',
     tech:'Technical',fund:'Fundamental',macro:'Macro',catalyst:'Catalyst',
-    rec_strong:'🟢 STRONG BUY CANDIDATE',rec_watch:'🟡 WATCHLIST',
-    rec_neutral:'⚪ NEUTRAL',rec_avoid:'🔴 AVOID',
-    chart:'📈 Live Chart',about:'📚 About the Company',
-    forecast:'🔮 Price Forecast — Concrete Estimate',
-    extended:'📈 Extended Analysis',
-    drivers:'💡 What drives this stock',news:'📰 Latest News',
-    keymetrics:'📊 Key Metrics',news_source:'Live from Yahoo Finance',
-    expand_more:'▼ Show more',expand_less:'▲ Show less',
+    rec_strong:'🟢 STRONG BUY',rec_watch:'🟡 WATCHLIST',rec_neutral:'⚪ NEUTRAL',rec_avoid:'🔴 AVOID',
+    chart:'📈 Live Chart',about:'📚 About',
+    forecast:'🔮 Price Forecast',extended:'📈 Extended Analysis',
+    drivers:'💡 What drives this stock',news:'📰 News',
+    keymetrics:'📊 Key Metrics',
+    ai_title:'🤖 AI Analysis (Groq AI)',
+    ai_powered:'Powered by Llama 3.3',
+    ai_loading:'AI thinking...',
+    ai_unavailable:'AI analysis unavailable. (Check API key)',
+    ai_story:'📖 The Story',
+    ai_strengths:'✅ Strengths',ai_risks:'⚠️ Risks',
+    ai_entry:'Entry',ai_target:'Target',ai_stop:'Stop-Loss',
+    ai_buy:'BUY',ai_wait:'WAIT',ai_avoid:'SELL',
+    ai_confidence:'Confidence',ai_timeframe:'Timeframe:',
+    ai_earnings_warn:'⚠️ Earnings Warning:',
+    ai_verdict:'🎯 Final Verdict:',
+    smart_copy:'🧠 Deep Analysis with Claude.ai or ChatGPT',
+    smart_copy_desc:'Click to copy a complete analysis request. Then paste in Claude.ai or ChatGPT.',
+    smart_copy_btn:'📋 Copy Analysis Request',
+    smart_copy_done:'✅ Copied! Now paste in Claude.ai',
+    expand_more:'▼ More',expand_less:'▲ Less',
     forecast_warn:'⚠️ Important:',
-    forecast_warn_text:'These numbers are algorithmic estimates, not guarantees. Actual prices can move completely differently. Historical accuracy: ~55-65% on direction.',
+    forecast_warn_text:'Estimates, not guarantees. Direction accuracy ~55-65%.',
     data_quality_high:'✓ High data quality',
     data_quality_medium:'⚠ Medium data quality',
     data_quality_low:'⚠ Low data quality',
@@ -506,47 +593,57 @@ const i18n = {
     fc_range:'Range:',fc_target:'Target:',
     fc_up_strong:'Strong ↑',fc_up:'Up',fc_neutral:'Neutral',
     fc_down:'Down',fc_down_strong:'Strong ↓',
-    ext_short:'🩳 Short Interest',ext_insider:'👔 Insiders & Institutions',
-    ext_cashflow:'💵 Cash Flow',ext_earnings:'📅 Next Earnings',
-    ext_competitors:'⚔️ Competitors (12M Performance)',
-    short_ratio:'Short Ratio',short_float:'Short % of Float',
+    ext_short:'🩳 Short Interest',ext_insider:'👔 Insiders',ext_cashflow:'💵 Cash Flow',
+    ext_earnings:'📅 Next Earnings',ext_competitors:'⚔️ Competitors (12M)',
+    short_ratio:'Short Ratio',short_float:'Short % Float',
     shares_short:'Shares Short',shares_short_prior:'Prior Month',
-    insider_own:'Insider Ownership',inst_own:'Institutional Ownership',
-    op_cashflow:'Operating Cashflow',free_cashflow:'Free Cashflow',
+    insider_own:'Insider Own.',inst_own:'Institutional',
+    op_cashflow:'Op. Cashflow',free_cashflow:'Free Cashflow',
     total_cash:'Total Cash',total_debt:'Total Debt',
     market_cap:'Market Cap',pe:'P/E',forward_pe:'Forward P/E',
     beta:'Beta',dividend:'Dividend',high52:'52w High',low52:'52w Low',avg_vol:'Avg Volume',
-    no_data:'No data available',
-    sentiment_pos:'Positive',sentiment_neg:'Negative',sentiment_neu:'Neutral',
-    no_news:'No recent news',no_summary:'No description available',
-    err_empty:'Please enter a ticker',err_network:'Network error',
-    loading:'Loading live data',loading_picks:'Scanning 50+ stocks... (may take 1-2 min)',
+    no_data:'No data',sentiment_pos:'Positive',sentiment_neg:'Negative',sentiment_neu:'Neutral',
+    no_news:'No news',no_summary:'No description',
+    err_empty:'Please enter ticker',err_network:'Network error',
+    loading:'Loading live data + AI analysis',loading_picks:'Scanning 50+ stocks...',
     disclaimer_title:'⚠️ Disclaimer:',
-    disclaimer:'Score 80+ = high confluence of historical setup conditions. Not investment advice.',
-    tp_title:'⭐ Top Picks — Best Stocks Now',
-    tp_subtitle:'Sorted by score · Click for full analysis',
-    tp_filter_all:'All',tp_filter_strong:'Score 80+',tp_filter_watch:'65+',tp_filter_tech:'Tech',
+    disclaimer:'Not investment advice. Your own research is your responsibility.',
+    tp_title:'⭐ Top Picks',tp_subtitle:'Sorted by score · Click for full analysis',
+    tp_filter_all:'All',tp_filter_strong:'80+',tp_filter_watch:'65+',tp_filter_tech:'Tech',
     tp_col_rank:'#',tp_col_ticker:'Ticker',tp_col_company:'Company',tp_col_price:'Price',
     tp_col_score:'Score',tp_col_1w:'1W %',tp_col_1m:'1M %',tp_col_year:'Year %',
   },
   ar: {
     dir:'rtl',lang:'ar',
-    title:'📊 محلل الانفجار السعري برو+',
-    subtitle:'مباشر · توقعات · أفضل الأسهم · تحليل متقدم',
+    title:'🚀 محلل الأسهم برو++ AI',
+    subtitle:'تحليل ذكي · مباشر · توقعات · أفضل الأسهم',
     placeholder:'مثال: NVDA, AAPL, TSLA',
     analyze:'تحليل',analyzing:'جاري التحليل...',toppicks:'⭐ أفضل الأسهم',
     examples:'أمثلة:',total:'النتيجة الإجمالية',
     tech:'فني',fund:'أساسي',macro:'كلي',catalyst:'محفز',
-    rec_strong:'🟢 مرشح شراء قوي',rec_watch:'🟡 قائمة المراقبة',
-    rec_neutral:'⚪ محايد',rec_avoid:'🔴 تجنب',
-    chart:'📈 رسم بياني حي',about:'📚 عن الشركة',
-    forecast:'🔮 توقعات السعر — تقدير ملموس',
-    extended:'📈 تحليل متقدم',
-    drivers:'💡 ما يحرك هذا السهم',news:'📰 آخر الأخبار',
-    keymetrics:'📊 المؤشرات الرئيسية',news_source:'حي من Yahoo Finance',
-    expand_more:'▼ عرض المزيد',expand_less:'▲ عرض أقل',
+    rec_strong:'🟢 شراء قوي',rec_watch:'🟡 قائمة المراقبة',rec_neutral:'⚪ محايد',rec_avoid:'🔴 تجنب',
+    chart:'📈 رسم بياني',about:'📚 عن الشركة',
+    forecast:'🔮 توقعات السعر',extended:'📈 تحليل متقدم',
+    drivers:'💡 ما يحرك السهم',news:'📰 الأخبار',
+    keymetrics:'📊 المؤشرات',
+    ai_title:'🤖 تحليل ذكي (Groq AI)',
+    ai_powered:'مدعوم بـ Llama 3.3',
+    ai_loading:'الذكاء الاصطناعي يفكر...',
+    ai_unavailable:'التحليل الذكي غير متاح. (تحقق من API)',
+    ai_story:'📖 القصة',
+    ai_strengths:'✅ نقاط القوة',ai_risks:'⚠️ المخاطر',
+    ai_entry:'الدخول',ai_target:'الهدف',ai_stop:'وقف الخسارة',
+    ai_buy:'شراء',ai_wait:'انتظار',ai_avoid:'بيع',
+    ai_confidence:'الثقة',ai_timeframe:'الإطار الزمني:',
+    ai_earnings_warn:'⚠️ تحذير الأرباح:',
+    ai_verdict:'🎯 التقييم النهائي:',
+    smart_copy:'🧠 تحليل عميق مع Claude.ai أو ChatGPT',
+    smart_copy_desc:'انقر لنسخ طلب تحليل كامل. ثم الصق في Claude.ai أو ChatGPT.',
+    smart_copy_btn:'📋 نسخ طلب التحليل',
+    smart_copy_done:'✅ تم النسخ! الصق الآن في Claude.ai',
+    expand_more:'▼ المزيد',expand_less:'▲ أقل',
     forecast_warn:'⚠️ تنبيه:',
-    forecast_warn_text:'هذه الأرقام تقديرات خوارزمية، ليست ضمانات. الأسعار الفعلية قد تتحرك بشكل مختلف تماماً.',
+    forecast_warn_text:'تقديرات، ليست ضمانات. دقة الاتجاه ~55-65%.',
     data_quality_high:'✓ جودة بيانات عالية',
     data_quality_medium:'⚠ جودة بيانات متوسطة',
     data_quality_low:'⚠ جودة بيانات منخفضة',
@@ -554,25 +651,23 @@ const i18n = {
     fc_range:'المدى:',fc_target:'الهدف:',
     fc_up_strong:'صعود قوي ↑',fc_up:'صعود',fc_neutral:'محايد',
     fc_down:'هبوط',fc_down_strong:'هبوط قوي ↓',
-    ext_short:'🩳 البيع على المكشوف',ext_insider:'👔 الداخليون والمؤسسات',
-    ext_cashflow:'💵 التدفق النقدي',ext_earnings:'📅 الأرباح القادمة',
-    ext_competitors:'⚔️ المنافسون (أداء 12 شهر)',
-    short_ratio:'نسبة البيع المكشوف',short_float:'٪ البيع المكشوف من العائم',
-    shares_short:'الأسهم المباعة',shares_short_prior:'الشهر السابق',
-    insider_own:'ملكية الداخليين',inst_own:'ملكية المؤسسات',
-    op_cashflow:'التدفق النقدي التشغيلي',free_cashflow:'التدفق النقدي الحر',
+    ext_short:'🩳 البيع المكشوف',ext_insider:'👔 الداخليون',ext_cashflow:'💵 التدفق النقدي',
+    ext_earnings:'📅 الأرباح القادمة',ext_competitors:'⚔️ المنافسون (12 شهر)',
+    short_ratio:'نسبة المكشوف',short_float:'٪ المكشوف',
+    shares_short:'أسهم مباعة',shares_short_prior:'الشهر السابق',
+    insider_own:'ملكية داخلية',inst_own:'مؤسسية',
+    op_cashflow:'تدفق تشغيلي',free_cashflow:'تدفق حر',
     total_cash:'إجمالي النقد',total_debt:'إجمالي الديون',
     market_cap:'القيمة السوقية',pe:'مكرر الربحية',forward_pe:'مكرر آجل',
     beta:'بيتا',dividend:'توزيعات',high52:'قمة 52 أسبوع',low52:'قاع 52 أسبوع',avg_vol:'متوسط الحجم',
     no_data:'لا توجد بيانات',
     sentiment_pos:'إيجابي',sentiment_neg:'سلبي',sentiment_neu:'محايد',
     no_news:'لا توجد أخبار',no_summary:'لا يوجد وصف',
-    err_empty:'يرجى إدخال رمز السهم',err_network:'خطأ في الشبكة',
-    loading:'جاري التحميل',loading_picks:'فحص 50+ سهم... (قد يستغرق 1-2 دقيقة)',
+    err_empty:'يرجى إدخال الرمز',err_network:'خطأ في الشبكة',
+    loading:'تحميل البيانات + التحليل الذكي',loading_picks:'فحص 50+ سهم...',
     disclaimer_title:'⚠️ تنبيه:',
-    disclaimer:'النتيجة 80+ تعني التقاء عوامل تاريخية. هذا ليس نصيحة استثمارية.',
-    tp_title:'⭐ أفضل الأسهم الآن',
-    tp_subtitle:'مرتبة حسب النتيجة · انقر للتحليل الكامل',
+    disclaimer:'ليست نصيحة استثمارية.',
+    tp_title:'⭐ أفضل الأسهم',tp_subtitle:'مرتبة حسب النتيجة · انقر للتحليل الكامل',
     tp_filter_all:'الكل',tp_filter_strong:'80+',tp_filter_watch:'65+',tp_filter_tech:'تقنية',
     tp_col_rank:'#',tp_col_ticker:'الرمز',tp_col_company:'الشركة',tp_col_price:'السعر',
     tp_col_score:'النتيجة',tp_col_1w:'أسبوع',tp_col_1m:'شهر',tp_col_year:'السنة',
@@ -609,8 +704,12 @@ function setLang(lang) {
   document.getElementById('lbl-extended').textContent = t.extended;
   document.getElementById('lbl-drivers').textContent = t.drivers;
   document.getElementById('lbl-news').textContent = t.news;
-  document.getElementById('lbl-news-source').textContent = t.news_source;
   document.getElementById('lbl-keymetrics').textContent = t.keymetrics;
+  document.getElementById('lbl-ai').textContent = t.ai_title;
+  document.getElementById('lbl-ai-powered').textContent = t.ai_powered;
+  document.getElementById('lbl-smart-copy').textContent = t.smart_copy;
+  document.getElementById('lbl-smart-copy-desc').textContent = t.smart_copy_desc;
+  document.getElementById('smart-copy-text').textContent = t.smart_copy_btn;
   document.getElementById('lbl-forecast-warn').textContent = t.forecast_warn;
   document.getElementById('lbl-forecast-warn-text').textContent = t.forecast_warn_text;
   document.getElementById('lbl-disclaimer-title').textContent = t.disclaimer_title;
@@ -639,7 +738,7 @@ async function analyze() {
   document.getElementById('analyze-btn').disabled = true;
   document.getElementById('analyze-btn').textContent = t.analyzing;
   try {
-    const r = await fetch('/api/score/' + encodeURIComponent(ticker));
+    const r = await fetch('/api/score/' + encodeURIComponent(ticker) + '?lang=' + currentLang);
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Unknown error');
     lastResult = data;
@@ -679,12 +778,10 @@ function renderTopPicks() {
   const t = i18n[currentLang];
   const box = document.getElementById('toppicks-box');
   box.style.display = 'block';
-
   let picks = topPicksData.top_picks;
   if (topPicksFilter === 'strong') picks = picks.filter(p => p.score >= 80);
   else if (topPicksFilter === 'watch') picks = picks.filter(p => p.score >= 65);
   else if (topPicksFilter === 'tech') picks = picks.filter(p => (p.sector||'').toLowerCase().includes('tech'));
-
   const rows = picks.map((p, i) => {
     const scoreClass = p.score >= 80 ? 'score-strong' : p.score >= 65 ? 'score-watch' : p.score >= 50 ? 'score-neutral' : 'score-avoid';
     const fmtPct = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
@@ -699,10 +796,8 @@ function renderTopPicks() {
         <td style="color:${colorPct(p.forecast_1w)}">${fmtPct(p.forecast_1w)}</td>
         <td style="color:${colorPct(p.forecast_1m)}">${fmtPct(p.forecast_1m)}</td>
         <td style="color:${colorPct(p.forecast_year)}">${fmtPct(p.forecast_year)}</td>
-      </tr>
-    `;
+      </tr>`;
   }).join('');
-
   box.innerHTML = `
     <div class="card">
       <div class="card-header">
@@ -718,24 +813,18 @@ function renderTopPicks() {
       </div>
       <div style="overflow-x:auto">
         <table class="top-picks-table">
-          <thead>
-            <tr>
-              <th>${t.tp_col_rank}</th><th>${t.tp_col_ticker}</th><th>${t.tp_col_company}</th>
-              <th>${t.tp_col_price}</th><th>${t.tp_col_score}</th>
-              <th>${t.tp_col_1w}</th><th>${t.tp_col_1m}</th><th>${t.tp_col_year}</th>
-            </tr>
-          </thead>
+          <thead><tr>
+            <th>${t.tp_col_rank}</th><th>${t.tp_col_ticker}</th><th>${t.tp_col_company}</th>
+            <th>${t.tp_col_price}</th><th>${t.tp_col_score}</th>
+            <th>${t.tp_col_1w}</th><th>${t.tp_col_1m}</th><th>${t.tp_col_year}</th>
+          </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function setTopPicksFilter(f) {
-  topPicksFilter = f;
-  renderTopPicks();
-}
+function setTopPicksFilter(f) { topPicksFilter = f; renderTopPicks(); }
 
 function showError(msg) {
   document.getElementById('error-box').innerHTML = '<div class="error">⚠️ ' + msg + '</div>';
@@ -765,8 +854,7 @@ function renderResult(data) {
   const t = i18n[currentLang];
   document.getElementById('result-box').style.display = 'block';
   document.getElementById('toppicks-box').style.display = 'none';
-  document.getElementById('company-name').innerHTML =
-    data.company + ' <span>(' + data.ticker + ')</span>';
+  document.getElementById('company-name').innerHTML = data.company + ' <span>(' + data.ticker + ')</span>';
   document.getElementById('company-meta').textContent =
     data.sector + (data.industry ? ' · ' + data.industry : '') + (data.exchange ? ' · ' + data.exchange : '');
   document.getElementById('price-big').textContent = '$' + data.current_price.toFixed(2);
@@ -775,6 +863,8 @@ function renderResult(data) {
   document.getElementById('price-change').innerHTML =
     '<span style="color:' + changeColor + '">' + (data.change >= 0 ? '+' : '') + data.change.toFixed(2) +
     ' (' + (data.change >= 0 ? '+' : '') + data.change_pct.toFixed(2) + '%) ' + arrow + '</span>';
+
+  renderAI(data.ai_analysis);
 
   const total = data.total_score;
   document.getElementById('total-score').textContent = Math.round(total);
@@ -794,7 +884,6 @@ function renderResult(data) {
     bar.style.background = 'var(--red)'; rec.textContent = t.rec_avoid;
     rec.style.background = 'var(--danger-bg)'; rec.style.color = 'var(--danger-text)';
   }
-
   const c = data.categories;
   document.getElementById('cat-tech').textContent = c.technical.toFixed(1);
   document.getElementById('cat-fund').textContent = c.fundamental.toFixed(1);
@@ -804,52 +893,133 @@ function renderResult(data) {
   document.getElementById('bar-fund').style.width = (c.fundamental/35*100) + '%';
   document.getElementById('bar-macro').style.width = (c.macro/15*100) + '%';
   document.getElementById('bar-cat').style.width = (c.catalyst/10*100) + '%';
-
   drawChart(data.chart, currentRange);
-
-  // NEW: Forecast
   renderForecast(data.forecast, data.current_price);
-
-  // NEW: Extended Analysis
   renderExtended(data.extended);
-
   const summary = data.explanation.summary || t.no_summary;
   document.getElementById('company-summary').textContent = summary;
   document.getElementById('company-summary').classList.remove('expanded');
   document.getElementById('expand-btn').textContent = t.expand_more;
   document.getElementById('expand-btn').style.display = summary.length > 250 ? 'block' : 'none';
-
   renderDrivers(data.explanation);
   renderNews(data.news);
   renderKeyMetrics(data.explanation.key_metrics);
+  
+  // Reset smart copy button
+  const scBtn = document.getElementById('smart-copy-btn');
+  scBtn.classList.remove('copied');
+  document.getElementById('smart-copy-text').textContent = t.smart_copy_btn;
+}
+
+function renderAI(ai) {
+  const t = i18n[currentLang];
+  const content = document.getElementById('ai-content');
+  if (!ai || !ai.available || !ai.data) {
+    content.innerHTML = '<div class="ai-unavailable">' + (ai && ai.error ? ai.error : t.ai_unavailable) + '</div>';
+    return;
+  }
+  const a = ai.data;
+  const recMap = {
+    'BUY': { icon: '🟢', cls: 'ai-rec-buy', label: t.ai_buy },
+    'WAIT': { icon: '🟡', cls: 'ai-rec-wait', label: t.ai_wait },
+    'AVOID': { icon: '🔴', cls: 'ai-rec-avoid', label: t.ai_avoid },
+    'SELL': { icon: '🔴', cls: 'ai-rec-avoid', label: t.ai_avoid },
+  };
+  const rec = recMap[a.recommendation] || recMap['WAIT'];
+  let html = `
+    <div class="ai-rec-big">
+      <span class="ai-rec-icon">${rec.icon}</span>
+      <div class="ai-rec-text">
+        <div class="ai-rec-action ${rec.cls}">${rec.label}</div>
+        <div class="ai-rec-confidence">${t.ai_confidence}: ${a.confidence || '?'}%${a.timeframe ? ' · ' + t.ai_timeframe + ' ' + a.timeframe : ''}</div>
+      </div>
+    </div>
+    <div class="ai-prices">
+      <div class="ai-price-box">
+        <div class="ai-price-label">${t.ai_entry}</div>
+        <div class="ai-price-value">${a.entry_price || '—'}</div>
+      </div>
+      <div class="ai-price-box">
+        <div class="ai-price-label">${t.ai_target}</div>
+        <div class="ai-price-value" style="color:var(--success-text)">${a.target_price || '—'}</div>
+      </div>
+      <div class="ai-price-box">
+        <div class="ai-price-label">${t.ai_stop}</div>
+        <div class="ai-price-value" style="color:var(--danger-text)">${a.stop_loss || '—'}</div>
+      </div>
+    </div>`;
+  if (a.story) {
+    html += `<div class="ai-story"><strong>${t.ai_story}:</strong> ${a.story}</div>`;
+  }
+  if ((a.strengths && a.strengths.length) || (a.risks && a.risks.length)) {
+    html += `<div class="ai-list-grid">
+      <div class="ai-list-box">
+        <div class="ai-list-title pos">${t.ai_strengths}</div>
+        ${(a.strengths || []).map(s => `<div class="ai-list-item">• ${s}</div>`).join('')}
+      </div>
+      <div class="ai-list-box">
+        <div class="ai-list-title neg">${t.ai_risks}</div>
+        ${(a.risks || []).map(r => `<div class="ai-list-item">• ${r}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  if (a.earnings_warning) {
+    html += `<div class="ai-warning"><strong>${t.ai_earnings_warn}</strong> ${a.earnings_warning}</div>`;
+  }
+  if (a.verdict) {
+    html += `<div class="ai-verdict"><strong>${t.ai_verdict}</strong> ${a.verdict}</div>`;
+  }
+  content.innerHTML = html;
+}
+
+function copySmartPrompt() {
+  if (!lastResult || !lastResult.smart_copy_prompt) return;
+  const t = i18n[currentLang];
+  const btn = document.getElementById('smart-copy-btn');
+  const textEl = document.getElementById('smart-copy-text');
+  navigator.clipboard.writeText(lastResult.smart_copy_prompt).then(() => {
+    btn.classList.add('copied');
+    textEl.textContent = t.smart_copy_done;
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      textEl.textContent = t.smart_copy_btn;
+    }, 4000);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = lastResult.smart_copy_prompt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.classList.add('copied');
+    textEl.textContent = t.smart_copy_done;
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      textEl.textContent = t.smart_copy_btn;
+    }, 4000);
+  });
 }
 
 function renderForecast(forecast, currentPrice) {
   const t = i18n[currentLang];
   const fc = forecast.forecasts;
-
-  // Data quality badge
   const qBadge = document.getElementById('data-quality-badge');
   if (forecast.data_quality === 'high') {
     qBadge.textContent = t.data_quality_high;
-    qBadge.style.background = 'var(--success-bg)';
-    qBadge.style.color = 'var(--success-text)';
+    qBadge.style.background = 'var(--success-bg)'; qBadge.style.color = 'var(--success-text)';
   } else if (forecast.data_quality === 'medium') {
     qBadge.textContent = t.data_quality_medium;
-    qBadge.style.background = 'var(--warning-bg)';
-    qBadge.style.color = 'var(--warning-text)';
+    qBadge.style.background = 'var(--warning-bg)'; qBadge.style.color = 'var(--warning-text)';
   } else {
     qBadge.textContent = t.data_quality_low;
-    qBadge.style.background = 'var(--danger-bg)';
-    qBadge.style.color = 'var(--danger-text)';
+    qBadge.style.background = 'var(--danger-bg)'; qBadge.style.color = 'var(--danger-text)';
   }
-
   const items = [
     { key: '1w', label: t.fc_1w, data: fc['1w'] },
     { key: '1m', label: t.fc_1m, data: fc['1m'] },
     { key: 'year', label: t.fc_year, data: fc['yearend'] },
   ];
-
   document.getElementById('forecast-cards').innerHTML = items.map(item => {
     const f = item.data;
     let cls, arrow, label;
@@ -876,8 +1046,7 @@ function renderForecast(forecast, currentPrice) {
           ${arrow}
           <div class="forecast-arrow-label">${label}</div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
@@ -887,82 +1056,44 @@ function renderExtended(ext) {
     document.getElementById('extended-content').innerHTML = '<div style="color:var(--text-2);text-align:center;padding:20px">' + t.no_data + '</div>';
     return;
   }
-  const s = ext.short_interest;
-  const ins = ext.insider;
-  const cf = ext.cashflow;
-
+  const s = ext.short_interest; const ins = ext.insider; const cf = ext.cashflow;
   let html = '';
-
-  // Short Interest
-  html += `
-    <div style="margin-bottom: 16px;">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_short}</div>
-      <div class="metric-grid">
-        <div class="metric"><div class="metric-label">${t.short_ratio}</div><div class="metric-value">${s.short_ratio != null ? s.short_ratio.toFixed(2) : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.short_float}</div><div class="metric-value">${s.short_percent_of_float != null ? s.short_percent_of_float + '%' : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.shares_short}</div><div class="metric-value">${s.shares_short != null ? fmt(s.shares_short) : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.shares_short_prior}</div><div class="metric-value">${s.shares_short_prior_month != null ? fmt(s.shares_short_prior_month) : '—'}</div></div>
-      </div>
-    </div>
-  `;
-
-  // Insider/Institutional
-  html += `
-    <div style="margin-bottom: 16px;">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_insider}</div>
-      <div class="metric-grid">
-        <div class="metric"><div class="metric-label">${t.insider_own}</div><div class="metric-value">${ins.insider_ownership_pct != null ? ins.insider_ownership_pct + '%' : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.inst_own}</div><div class="metric-value">${ins.institution_ownership_pct != null ? ins.institution_ownership_pct + '%' : '—'}</div></div>
-      </div>
-    </div>
-  `;
-
-  // Cash Flow
-  html += `
-    <div style="margin-bottom: 16px;">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_cashflow}</div>
-      <div class="metric-grid">
-        <div class="metric"><div class="metric-label">${t.op_cashflow}</div><div class="metric-value">${cf.operating_cashflow != null ? '$' + fmt(cf.operating_cashflow) : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.free_cashflow}</div><div class="metric-value">${cf.free_cashflow != null ? '$' + fmt(cf.free_cashflow) : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.total_cash}</div><div class="metric-value">${cf.total_cash != null ? '$' + fmt(cf.total_cash) : '—'}</div></div>
-        <div class="metric"><div class="metric-label">${t.total_debt}</div><div class="metric-value">${cf.total_debt != null ? '$' + fmt(cf.total_debt) : '—'}</div></div>
-      </div>
-    </div>
-  `;
-
-  // Earnings Date
+  html += `<div style="margin-bottom: 16px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_short}</div>
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">${t.short_ratio}</div><div class="metric-value">${s.short_ratio != null ? s.short_ratio.toFixed(2) : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.short_float}</div><div class="metric-value">${s.short_percent_of_float != null ? s.short_percent_of_float + '%' : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.shares_short}</div><div class="metric-value">${s.shares_short != null ? fmt(s.shares_short) : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.shares_short_prior}</div><div class="metric-value">${s.shares_short_prior_month != null ? fmt(s.shares_short_prior_month) : '—'}</div></div>
+    </div></div>`;
+  html += `<div style="margin-bottom: 16px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_insider}</div>
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">${t.insider_own}</div><div class="metric-value">${ins.insider_ownership_pct != null ? ins.insider_ownership_pct + '%' : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.inst_own}</div><div class="metric-value">${ins.institution_ownership_pct != null ? ins.institution_ownership_pct + '%' : '—'}</div></div>
+    </div></div>`;
+  html += `<div style="margin-bottom: 16px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_cashflow}</div>
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">${t.op_cashflow}</div><div class="metric-value">${cf.operating_cashflow != null ? '$' + fmt(cf.operating_cashflow) : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.free_cashflow}</div><div class="metric-value">${cf.free_cashflow != null ? '$' + fmt(cf.free_cashflow) : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.total_cash}</div><div class="metric-value">${cf.total_cash != null ? '$' + fmt(cf.total_cash) : '—'}</div></div>
+      <div class="metric"><div class="metric-label">${t.total_debt}</div><div class="metric-value">${cf.total_debt != null ? '$' + fmt(cf.total_debt) : '—'}</div></div>
+    </div></div>`;
   if (ext.earnings_date) {
-    html += `
-      <div style="margin-bottom: 16px;">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_earnings}</div>
-        <div style="font-size:14px;color:var(--accent);font-weight:600">${ext.earnings_date}</div>
-      </div>
-    `;
+    html += `<div style="margin-bottom: 16px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_earnings}</div>
+      <div style="font-size:14px;color:var(--accent);font-weight:600">${ext.earnings_date}</div></div>`;
   }
-
-  // Competitors
   if (ext.competitors && ext.competitors.length > 0) {
-    html += `
-      <div>
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_competitors}</div>
-    `;
+    html += `<div><div style="font-size:13px;font-weight:600;margin-bottom:8px">${t.ext_competitors}</div>`;
     ext.competitors.forEach(c => {
       const retColor = c.return_1y >= 0 ? 'var(--success-text)' : 'var(--danger-text)';
-      html += `
-        <div class="competitor-row" onclick="quickAnalyze('${c.ticker}')" style="cursor:pointer">
-          <div>
-            <div class="competitor-name">${c.ticker}</div>
-            <div class="competitor-meta">${c.name}</div>
-          </div>
+      html += `<div class="competitor-row" onclick="quickAnalyze('${c.ticker}')" style="cursor:pointer">
+          <div><div class="competitor-name">${c.ticker}</div><div class="competitor-meta">${c.name}</div></div>
           <div>$${c.price.toFixed(2)}</div>
           <div style="color:${retColor}">${c.return_1y >= 0 ? '+' : ''}${c.return_1y.toFixed(1)}%</div>
           <div style="color:var(--text-3);font-size:11px">${c.market_cap ? '$' + fmt(c.market_cap) : '—'}</div>
-        </div>
-      `;
+        </div>`;
     });
     html += `</div>`;
   }
-
   document.getElementById('extended-content').innerHTML = html;
 }
 
@@ -1010,12 +1141,10 @@ function toggleSummary() {
 function renderDrivers(exp) {
   document.getElementById('drivers-pos').innerHTML = (exp.drivers_positive || []).map(d =>
     '<div class="driver driver-pos"><span class="driver-icon">✓</span>' +
-    '<div><div class="driver-title">' + d.title + '</div>' + d.text + '</div></div>'
-  ).join('');
+    '<div><div class="driver-title">' + d.title + '</div>' + d.text + '</div></div>').join('');
   document.getElementById('drivers-neg').innerHTML = (exp.drivers_negative || []).map(d =>
     '<div class="driver driver-neg"><span class="driver-icon">⚠</span>' +
-    '<div><div class="driver-title">' + d.title + '</div>' + d.text + '</div></div>'
-  ).join('');
+    '<div><div class="driver-title">' + d.title + '</div>' + d.text + '</div></div>').join('');
 }
 
 function renderNews(news) {
@@ -1029,8 +1158,7 @@ function renderNews(news) {
   list.innerHTML = news.map(n =>
     '<div class="news-item ' + n.sentiment + '" onclick="' + (n.url ? "window.open('" + n.url + "', '_blank')" : '') + '">' +
     '<div style="flex:1;min-width:0"><div class="news-title">' + n.title + '</div>' +
-    '<div class="news-meta">' + n.publisher + ' · ' + timeAgo(n.published) + ' · ' + sentLabel[n.sentiment] + '</div></div></div>'
-  ).join('');
+    '<div class="news-meta">' + n.publisher + ' · ' + timeAgo(n.published) + ' · ' + sentLabel[n.sentiment] + '</div></div></div>').join('');
 }
 
 function renderKeyMetrics(km) {
@@ -1047,8 +1175,7 @@ function renderKeyMetrics(km) {
   ];
   document.getElementById('key-metrics').innerHTML = items.map(i =>
     '<div class="metric"><div class="metric-label">' + i.label + '</div>' +
-    '<div class="metric-value">' + i.value + '</div></div>'
-  ).join('');
+    '<div class="metric-value">' + i.value + '</div></div>').join('');
 }
 
 setLang('de');
