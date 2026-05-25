@@ -1,11 +1,12 @@
-"""Stock Explosion Scorer Pro - Backend with Charts, News & Probabilities"""
+"""Stock Explosion Scorer Pro+ - Mit Prognosen, Top Picks, Erweiterte Analyse & Smart-Filter"""
 from __future__ import annotations
-import sys, json, logging, math
-from datetime import datetime
+import sys, json, logging, math, time
+from datetime import datetime, timedelta
+from functools import lru_cache
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -13,6 +14,23 @@ log = logging.getLogger("scorer")
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
+
+# Cache fuer Top Picks (max 1 Stunde)
+_top_picks_cache = {"data": None, "timestamp": 0}
+_CACHE_TTL = 3600  # 1 Stunde
+
+# Beliebte Aktien fuer den Top Picks Scanner
+POPULAR_TICKERS = [
+    "NVDA", "AAPL", "MSFT", "GOOGL", "META", "AMZN", "TSLA", "AMD",
+    "AVGO", "ORCL", "CRM", "ADBE", "NFLX", "INTC", "QCOM", "TXN",
+    "PLTR", "COIN", "MSTR", "SHOP", "SQ", "PYPL", "UBER", "ABNB",
+    "JPM", "BAC", "GS", "V", "MA", "AXP", "BRK-B",
+    "UNH", "LLY", "JNJ", "PFE", "MRK", "ABBV",
+    "WMT", "COST", "HD", "MCD", "NKE", "SBUX",
+    "XOM", "CVX", "BA", "CAT", "GE",
+    "DIS", "T", "VZ", "TMUS",
+    "SMCI", "ARM", "MU"
+]
 
 
 class MarketData:
@@ -105,6 +123,8 @@ def _eps(d):
     return []
 
 
+# === 19 BEDINGUNGEN ===
+
 def c1(d):
     c = float(d.close.iloc[-1])
     ma50, ma150, ma200 = float(d.ma(50).iloc[-1]), float(d.ma(150).iloc[-1]), float(d.ma(200).iloc[-1])
@@ -120,7 +140,7 @@ def c1(d):
 def c2(d):
     h = float(d.close.iloc[-252:].max()); c = float(d.close.iloc[-1]); pct = c/h
     return _r(2, _step(pct, [(.95,5),(.90,4),(.85,3),(.75,2),(.65,1)]), 5,
-              f"{pct*100:.1f}% of 52w high (${c:.2f} / ${h:.2f})")
+              f"{pct*100:.1f}% of 52w high")
 
 def c3(d):
     if d.spy.empty or len(d.spy)<252: return _r(3, 0, 10, "SPY data unavailable", False)
@@ -128,7 +148,7 @@ def c3(d):
     if np.isnan(sr) or np.isnan(br): return _r(3, 0, 10, "Insufficient", False)
     diff = sr-br
     return _r(3, _step(diff, [(.50,10),(.30,8),(.15,6),(.05,4),(0,2)]), 10,
-              f"Stock 12m: {sr*100:+.1f}% vs SPY: {br*100:+.1f}% -> Delta {diff*100:+.1f}%")
+              f"Stock 12m: {sr*100:+.1f}% vs SPY: {br*100:+.1f}%")
 
 def c4(d):
     c = float(d.close.iloc[-1]); m = float(d.ma(150).iloc[-1])
@@ -152,7 +172,7 @@ def c5(d):
     elif contr: pts,m = 3, "Contracting"
     elif tight: pts,m = 2, "Tight"
     else: pts,m = 0, "No contraction"
-    return _r(5, pts, 5, f"{m} - {rngs[2]*100:.1f}% -> {rngs[1]*100:.1f}% -> {rngs[0]*100:.1f}%")
+    return _r(5, pts, 5, m)
 
 def c6(d):
     if len(d.volume)<50: return _r(6, 0, 5, "Insufficient", False)
@@ -167,7 +187,7 @@ def c6(d):
     elif r>1.2 and ud>1.0: pts=3
     elif ud>1.0: pts=2
     else: pts=0
-    return _r(6, pts, 5, f"5d/50d: {r:.2f}x, U/D: {ud:.2f}x")
+    return _r(6, pts, 5, f"5d/50d: {r:.2f}x")
 
 def c7(d):
     e = _eps(d)
@@ -197,7 +217,7 @@ def c9(d):
     g = d.info.get("revenueGrowth")
     if g is None: return _r(9, 0, 5, "Unavailable", False)
     return _r(9, _step(g,[(.30,5),(.20,4),(.15,3),(.10,2),(.05,1)]), 5,
-              f"Revenue growth (YoY): {g*100:+.1f}%")
+              f"Revenue growth: {g*100:+.1f}%")
 
 def c10(d):
     om = d.info.get("operatingMargins"); pm = d.info.get("profitMargins")
@@ -219,7 +239,7 @@ def c12(d):
     if np.isnan(sr) or np.isnan(br): return _r(12, 0, 5, "Insufficient", False)
     diff = sr-br
     pts = 5 if diff>=.15 else 4 if diff>=.08 else 3 if diff>=.03 else 2 if diff>=0 else 1 if diff>=-.05 else 0
-    return _r(12, pts, 5, f"Sector {d._sector_symbol or '?'} 12m: {sr*100:+.1f}% vs SPY: {br*100:+.1f}%")
+    return _r(12, pts, 5, f"Sector vs SPY: {diff*100:+.1f}%")
 
 def c13(d):
     if d.spy.empty or len(d.spy)<200: return _r(13, 0, 5, "Unavailable", False)
@@ -229,7 +249,7 @@ def c13(d):
     if last>m50: pts+=2; parts.append("SPY>MA50")
     if last>m200: pts+=2; parts.append("SPY>MA200")
     if m50>m200: pts+=1; parts.append("Golden Cross")
-    return _r(13, pts, 5, ", ".join(parts) if parts else "Bearish market")
+    return _r(13, pts, 5, ", ".join(parts) if parts else "Bearish")
 
 def c14(d):
     if d.vix.empty: return _r(14, 0, 3, "Unavailable", False)
@@ -243,7 +263,7 @@ def c15(d):
     if m60==0: return _r(15, 0, 3, "Bad data", False)
     diff = (cur-m60)/m60
     pts = 3 if diff<-.05 else 2 if diff<0 else 1 if diff<=.05 else 0
-    return _r(15, pts, 3, f"10Y yield: {cur/10:.2f}%, vs 60d-MA: {diff*100:+.1f}%")
+    return _r(15, pts, 3, f"10Y vs 60d-MA: {diff*100:+.1f}%")
 
 def c16(d):
     if d.dxy.empty or len(d.dxy)<60: return _r(16, 0, 2, "Unavailable", False)
@@ -261,7 +281,7 @@ def c17(d):
     sec = (d.info.get("sector") or "").lower()
     growth = sec in {"technology","communication services","consumer cyclical"}
     defensive = sec in {"consumer defensive","utilities","healthcare"}
-    if risk_on and growth: return _r(17, 2, 2, f"Risk-on & growth ({sec})")
+    if risk_on and growth: return _r(17, 2, 2, f"Risk-on & growth")
     if risk_on or defensive: return _r(17, 1, 2, f"Risk-on OR defensive")
     return _r(17, 0, 2, f"Risk-off & growth")
 
@@ -285,6 +305,8 @@ ALL = [c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19]
 CAT_OF = {1:0,2:0,3:0,4:0,5:0,6:0, 7:1,8:1,9:1,10:1,11:1,12:1,
           13:2,14:2,15:2,16:2,17:2, 18:3,19:3}
 
+
+# === EXISTING HELPER FUNCTIONS ===
 
 def get_chart_data(d):
     def slice_data(days):
@@ -376,6 +398,148 @@ def get_expectations(d, total_score):
             "bear": {"probability": bear}}}
 
 
+# === NEW: PAKET 1 — MULTI-TIMEFRAME FORECAST ===
+
+def get_forecast(d, total_score, categories):
+    """Berechnet konkrete %-Prognosen fuer 1 Woche, 1 Monat, Jahresende.
+    Mit Bereichen und Konfidenz."""
+    info = d.info
+    current = float(d.close.iloc[-1])
+
+    # Faktoren sammeln
+    score_factor = total_score / 100.0  # 0..1
+
+    # Analyst Upside
+    target_mean = info.get("targetMeanPrice")
+    analyst_upside = 0.0
+    if target_mean and current > 0:
+        analyst_upside = (target_mean / current) - 1
+        analyst_upside = max(-0.5, min(0.5, analyst_upside))  # cap at +-50%
+
+    # Momentum (12M Return)
+    momentum_12m = _ret(d.close, 252)
+    if np.isnan(momentum_12m):
+        momentum_12m = 0.0
+    momentum_factor = max(-0.5, min(0.5, momentum_12m))  # cap
+
+    # Sector Strength
+    sector_factor = 0.0
+    if not d.sector_etf.empty and not d.spy.empty:
+        sr = _ret(d.sector_etf["Close"], 252)
+        br = _ret(d.spy["Close"], 252)
+        if not (np.isnan(sr) or np.isnan(br)):
+            sector_factor = max(-0.2, min(0.2, sr - br))
+
+    # Market Trend
+    market_factor = 0.0
+    if not d.spy.empty:
+        spy_ret = _ret(d.spy["Close"], 252)
+        if not np.isnan(spy_ret):
+            market_factor = max(-0.3, min(0.3, spy_ret))
+
+    # Volatilitaet
+    rets = d.close.pct_change().dropna()
+    vol_ann = float(rets.std() * math.sqrt(252)) if len(rets) > 30 else 0.30
+
+    # === Berechne erwartete 12M-Rendite ===
+    # Wenn Score schwach (< 30) -> negative Rendite
+    # Wenn Score stark (> 70) -> positive Rendite
+    score_contribution = (score_factor - 0.5) * 0.6  # -0.3 bis +0.3
+
+    expected_12m = (
+        0.35 * score_contribution +
+        0.25 * analyst_upside +
+        0.20 * momentum_factor +
+        0.10 * sector_factor +
+        0.10 * market_factor
+    )
+
+    # Skaliere auf die Zeitrahmen
+    # 1 Woche = etwa 1/52 des Jahres, aber wir nehmen 0.18 weil Setups oft in der Anfangswoche stark performen
+    # 1 Monat = etwa 0.40, weil das meiste Setup-Movement in den ersten Wochen passiert
+    # Jahresende: skaliert nach verbleibenden Tagen im Jahr
+    today = datetime.now()
+    days_to_year_end = (datetime(today.year, 12, 31) - today).days
+    days_to_year_end = max(30, min(365, days_to_year_end))
+    yearend_scale = days_to_year_end / 365.0
+
+    forecasts = {
+        "1w":  {"days": 7,   "scale": 0.18},
+        "1m":  {"days": 30,  "scale": 0.40},
+        "yearend": {"days": days_to_year_end, "scale": yearend_scale * 0.85},
+    }
+
+    result = {}
+    for key, cfg in forecasts.items():
+        expected_pct = expected_12m * cfg["scale"]
+        # Range basierend auf Volatilitaet und Zeitrahmen
+        time_factor = math.sqrt(cfg["days"] / 252.0)
+        std_dev = vol_ann * time_factor
+        # 1-sigma Range
+        low_pct = expected_pct - std_dev
+        high_pct = expected_pct + std_dev
+
+        # Probability up (basierend auf erwartetem Wert und Vol)
+        if std_dev > 0:
+            z = expected_pct / std_dev
+            # Approximation Normalverteilung CDF
+            prob_up = 0.5 * (1 + math.erf(z / math.sqrt(2)))
+        else:
+            prob_up = 0.5 if expected_pct == 0 else (1.0 if expected_pct > 0 else 0.0)
+        prob_up = max(0.05, min(0.95, prob_up))
+
+        # Target price
+        target_price = current * (1 + expected_pct)
+        target_date = (today + timedelta(days=cfg["days"])).strftime("%Y-%m-%d")
+
+        # Direction signal
+        if expected_pct > 0.10:
+            direction = "strong_up"
+        elif expected_pct > 0.03:
+            direction = "up"
+        elif expected_pct > -0.03:
+            direction = "neutral"
+        elif expected_pct > -0.10:
+            direction = "down"
+        else:
+            direction = "strong_down"
+
+        result[key] = {
+            "expected_pct": round(expected_pct * 100, 2),
+            "low_pct": round(low_pct * 100, 2),
+            "high_pct": round(high_pct * 100, 2),
+            "target_price": round(target_price, 2),
+            "target_date": target_date,
+            "probability_up": round(prob_up * 100, 1),
+            "direction": direction,
+            "days": cfg["days"],
+        }
+
+    # Data quality flag
+    data_quality = "high"
+    missing = 0
+    if target_mean is None: missing += 1
+    if d.q_earnings.empty: missing += 1
+    if not info.get("revenueGrowth"): missing += 1
+    if missing >= 2:
+        data_quality = "low"
+    elif missing == 1:
+        data_quality = "medium"
+
+    return {
+        "forecasts": result,
+        "data_quality": data_quality,
+        "factors": {
+            "score": round(score_factor * 100, 1),
+            "analyst_upside": round(analyst_upside * 100, 1),
+            "momentum_12m": round(momentum_12m * 100, 1),
+            "sector_strength": round(sector_factor * 100, 1),
+            "market_trend": round(market_factor * 100, 1),
+            "volatility_annual": round(vol_ann * 100, 1),
+        }
+    }
+
+
 def get_explanation(d, conditions, categories):
     info = d.info
     summary = info.get("longBusinessSummary") or info.get("summary") or ""
@@ -383,39 +547,39 @@ def get_explanation(d, conditions, categories):
     rev_growth = info.get("revenueGrowth")
     if rev_growth and rev_growth >= 0.20:
         drivers_pos.append({"title": "Starkes Umsatzwachstum",
-            "text": f"Umsatz waechst um {rev_growth*100:.1f}% YoY - deutlich ueber Markt-Schnitt."})
+            "text": f"Umsatz waechst um {rev_growth*100:.1f}% YoY."})
     elif rev_growth and rev_growth < 0:
         drivers_neg.append({"title": "Umsatz schrumpft",
-            "text": f"Umsatz faellt um {rev_growth*100:.1f}% YoY - Geschaeftsmodell unter Druck."})
+            "text": f"Umsatz faellt um {rev_growth*100:.1f}% YoY."})
     margin = info.get("operatingMargins") or info.get("profitMargins")
     if margin and margin >= 0.25:
         drivers_pos.append({"title": "Hohe Margen",
-            "text": f"Operating-Margin von {margin*100:.1f}% zeigt Preissetzungsmacht."})
+            "text": f"Margin von {margin*100:.1f}% zeigt Preissetzungsmacht."})
     elif margin and margin < 0.05:
         drivers_neg.append({"title": "Schwache Margen",
-            "text": f"Margin von {margin*100:.1f}% - wenig Puffer bei Kostensteigerungen."})
+            "text": f"Margin von {margin*100:.1f}% - wenig Puffer."})
     roe = info.get("returnOnEquity")
     if roe and roe >= 0.20:
         drivers_pos.append({"title": "Starke Kapitalrendite",
-            "text": f"ROE von {roe*100:.1f}% - Management nutzt Eigenkapital effizient."})
+            "text": f"ROE von {roe*100:.1f}%."})
     debt_eq = info.get("debtToEquity")
     if debt_eq and debt_eq > 200:
         drivers_neg.append({"title": "Hohe Verschuldung",
-            "text": f"Debt-to-Equity von {debt_eq:.0f} - anfaellig bei steigenden Zinsen."})
+            "text": f"Debt-to-Equity von {debt_eq:.0f}."})
     if categories["technical"] >= 30:
         drivers_pos.append({"title": "Technisches Setup intakt",
-            "text": f"Technische Bedingungen erfuellen {categories['technical']:.0f}/40 Punkte."})
+            "text": f"Technische Bedingungen: {categories['technical']:.0f}/40 Punkte."})
     if categories["macro"] <= 5:
         drivers_neg.append({"title": "Schwieriges Makro-Umfeld",
-            "text": f"Makro-Score nur {categories['macro']:.0f}/15 - Markt wirkt als Gegenwind."})
+            "text": f"Makro-Score nur {categories['macro']:.0f}/15."})
     pe = info.get("forwardPE") or info.get("trailingPE")
     if pe and pe > 50:
         drivers_neg.append({"title": "Hohe Bewertung",
-            "text": f"KGV von {pe:.0f} preist starkes Wachstum bereits ein."})
+            "text": f"KGV von {pe:.0f} preist Wachstum bereits ein."})
     beta = info.get("beta")
     if beta and beta > 1.5:
         drivers_neg.append({"title": "Hohe Volatilitaet",
-            "text": f"Beta {beta:.2f} - Aktie schwankt staerker als der Markt."})
+            "text": f"Beta {beta:.2f}."})
     return {"summary": summary,
         "drivers_positive": drivers_pos[:4],
         "drivers_negative": drivers_neg[:4],
@@ -428,6 +592,100 @@ def get_explanation(d, conditions, categories):
             "52w_high": info.get("fiftyTwoWeekHigh"),
             "52w_low": info.get("fiftyTwoWeekLow"),
             "avg_volume": info.get("averageVolume")}}
+
+
+# === NEW: PAKET 3 — EXTENDED ANALYSIS ===
+
+def get_extended_analysis(d):
+    """Erweiterte Analyse: Insider, Short-Interest, Earnings Date, etc."""
+    info = d.info
+    yf_obj = d._yf
+
+    # Short Interest
+    short_data = {
+        "short_ratio": info.get("shortRatio"),
+        "short_percent_of_float": info.get("shortPercentOfFloat"),
+        "shares_short": info.get("sharesShort"),
+        "shares_short_prior_month": info.get("sharesShortPriorMonth"),
+    }
+    if short_data["short_percent_of_float"]:
+        short_data["short_percent_of_float"] = round(short_data["short_percent_of_float"] * 100, 2)
+
+    # Insider Activity
+    insider_data = {
+        "insider_ownership_pct": info.get("heldPercentInsiders"),
+        "institution_ownership_pct": info.get("heldPercentInstitutions"),
+        "insider_transactions": None,
+    }
+    if insider_data["insider_ownership_pct"]:
+        insider_data["insider_ownership_pct"] = round(insider_data["insider_ownership_pct"] * 100, 2)
+    if insider_data["institution_ownership_pct"]:
+        insider_data["institution_ownership_pct"] = round(insider_data["institution_ownership_pct"] * 100, 2)
+
+    # Cash Flow
+    cashflow_data = {
+        "operating_cashflow": info.get("operatingCashflow"),
+        "free_cashflow": info.get("freeCashflow"),
+        "total_cash": info.get("totalCash"),
+        "total_debt": info.get("totalDebt"),
+    }
+
+    # Earnings Date
+    earnings_date = None
+    try:
+        cal = yf_obj.calendar
+        if cal is not None and not (hasattr(cal, 'empty') and cal.empty):
+            if isinstance(cal, dict):
+                ed = cal.get("Earnings Date")
+                if ed and isinstance(ed, list) and len(ed) > 0:
+                    earnings_date = str(ed[0]) if hasattr(ed[0], 'strftime') else None
+                    if hasattr(ed[0], 'strftime'):
+                        earnings_date = ed[0].strftime("%Y-%m-%d")
+    except Exception as e:
+        log.warning(f"Earnings date fetch failed: {e}")
+
+    # Competitors (basierend auf Sektor)
+    competitors = []
+    sector = (info.get("sector") or "").lower()
+    industry = (info.get("industry") or "").lower()
+    competitor_map = {
+        "semiconductors": ["NVDA", "AMD", "INTC", "AVGO", "QCOM", "TSM"],
+        "software": ["MSFT", "ORCL", "CRM", "ADBE", "NOW"],
+        "internet content": ["GOOGL", "META", "PINS", "SNAP"],
+        "auto manufacturers": ["TSLA", "F", "GM", "RIVN", "LCID"],
+        "consumer electronics": ["AAPL", "SONY", "HPQ"],
+    }
+    matched_industry = None
+    for ind_key in competitor_map:
+        if ind_key in industry:
+            matched_industry = ind_key
+            break
+    if matched_industry:
+        comps = [c for c in competitor_map[matched_industry] if c != d.ticker][:3]
+        for comp_ticker in comps:
+            try:
+                comp = yf.Ticker(comp_ticker)
+                comp_info = comp.info or {}
+                comp_hist = comp.history(period="1y", auto_adjust=True)
+                if not comp_hist.empty:
+                    ret_1y = (comp_hist["Close"].iloc[-1] / comp_hist["Close"].iloc[0] - 1) * 100
+                    competitors.append({
+                        "ticker": comp_ticker,
+                        "name": comp_info.get("shortName", comp_ticker),
+                        "price": round(float(comp_hist["Close"].iloc[-1]), 2),
+                        "return_1y": round(float(ret_1y), 2),
+                        "market_cap": comp_info.get("marketCap"),
+                    })
+            except Exception as e:
+                log.warning(f"Competitor {comp_ticker} failed: {e}")
+
+    return {
+        "short_interest": short_data,
+        "insider": insider_data,
+        "cashflow": cashflow_data,
+        "earnings_date": earnings_date,
+        "competitors": competitors,
+    }
 
 
 def score_ticker(ticker):
@@ -467,8 +725,49 @@ def score_ticker(ticker):
         "chart": get_chart_data(d),
         "news": get_news(d._yf),
         "expectations": get_expectations(d, total),
-        "explanation": get_explanation(d, results, categories)}
+        "explanation": get_explanation(d, results, categories),
+        "forecast": get_forecast(d, total, categories),
+        "extended": get_extended_analysis(d),
+    }
 
+
+def quick_score(ticker):
+    """Schnellere Version fuer Top Picks Scan - nur Total Score und Basis-Info."""
+    try:
+        d = MarketData(ticker)
+        results = []
+        for fn in ALL:
+            try: results.append(fn(d))
+            except: results.append({"id":0,"score":0,"max":0,"detail":"","evaluable":False})
+        cats = [0.0,0.0,0.0,0.0]
+        for r in results:
+            if r["id"] in CAT_OF: cats[CAT_OF[r["id"]]] += r["score"]
+        total = round(sum(cats), 2)
+        current = float(d.close.iloc[-1])
+        prev = float(d.close.iloc[-2]) if len(d.close) > 1 else current
+        change_pct = (current/prev - 1) * 100 if prev > 0 else 0
+        forecast = get_forecast(d, total, {"technical":round(cats[0],2),"fundamental":round(cats[1],2),"macro":round(cats[2],2),"catalyst":round(cats[3],2)})
+        return {
+            "ticker": d.ticker,
+            "company": d.info.get("shortName") or d.info.get("longName") or d.ticker,
+            "sector": d.info.get("sector") or "Unknown",
+            "price": round(current, 2),
+            "change_pct": round(change_pct, 2),
+            "score": total,
+            "tech": round(cats[0],1),
+            "fund": round(cats[1],1),
+            "macro": round(cats[2],1),
+            "cat": round(cats[3],1),
+            "forecast_1w": forecast["forecasts"]["1w"]["expected_pct"],
+            "forecast_1m": forecast["forecasts"]["1m"]["expected_pct"],
+            "forecast_year": forecast["forecasts"]["yearend"]["expected_pct"],
+        }
+    except Exception as e:
+        log.warning(f"quick_score failed for {ticker}: {e}")
+        return None
+
+
+# === ROUTES ===
 
 @app.route("/")
 def index(): return send_from_directory(".", "index.html")
@@ -481,6 +780,35 @@ def api_score(ticker):
         log.exception("Failed")
         return jsonify({"error": f"Scoring failed: {e}"}), 500
 
+@app.route("/api/top-picks")
+def api_top_picks():
+    """Scannt populaere Aktien und gibt Top Picks zurueck."""
+    global _top_picks_cache
+    now = time.time()
+    # Cache check
+    if _top_picks_cache["data"] and (now - _top_picks_cache["timestamp"] < _CACHE_TTL):
+        return jsonify(_top_picks_cache["data"])
+
+    log.info("Scanning popular tickers for Top Picks...")
+    results = []
+    for tk in POPULAR_TICKERS:
+        r = quick_score(tk)
+        if r:
+            results.append(r)
+        time.sleep(0.05)  # rate limit protection
+
+    # Sort by score
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    response = {
+        "scanned": len(POPULAR_TICKERS),
+        "evaluated": len(results),
+        "top_picks": results[:20],
+        "timestamp": datetime.now().isoformat(),
+    }
+    _top_picks_cache = {"data": response, "timestamp": now}
+    return jsonify(response)
+
 @app.route("/api/health")
 def health(): return jsonify({"status":"ok","time":datetime.now().isoformat()})
 
@@ -488,5 +816,5 @@ def health(): return jsonify({"status":"ok","time":datetime.now().isoformat()})
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
-    print(f"\n  Stock Explosion Scorer Pro -> http://localhost:{port}\n")
+    print(f"\n  Stock Explosion Scorer Pro+ -> http://localhost:{port}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
