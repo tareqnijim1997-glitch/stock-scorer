@@ -38,15 +38,9 @@ _top_picks_cache = {"data": None, "timestamp": 0}
 _CACHE_TTL = 3600
 
 POPULAR_TICKERS = [
-    "NVDA", "AAPL", "MSFT", "GOOGL", "META", "AMZN", "TSLA", "AMD",
-    "AVGO", "ORCL", "CRM", "ADBE", "NFLX", "INTC", "QCOM", "TXN",
-    "PLTR", "COIN", "MSTR", "SHOP", "SQ", "PYPL", "UBER", "ABNB",
-    "JPM", "BAC", "GS", "V", "MA", "AXP", "BRK-B",
-    "UNH", "LLY", "JNJ", "PFE", "MRK", "ABBV",
-    "WMT", "COST", "HD", "MCD", "NKE", "SBUX",
-    "XOM", "CVX", "BA", "CAT", "GE",
-    "DIS", "T", "VZ", "TMUS",
-    "SMCI", "ARM", "MU"
+    "NVDA", "AAPL", "MSFT", "GOOGL", "META",
+    "AMZN", "TSLA", "AMD", "AVGO", "PLTR",
+    "NFLX", "COIN", "SMCI", "ARM", "MU"
 ]
 
 
@@ -962,7 +956,7 @@ def api_top_picks():
     for tk in POPULAR_TICKERS:
         r = quick_score(tk)
         if r: results.append(r)
-        time.sleep(0.05)
+        time.sleep(0.5)
     results.sort(key=lambda x: x["score"], reverse=True)
     response = {
         "scanned": len(POPULAR_TICKERS),
